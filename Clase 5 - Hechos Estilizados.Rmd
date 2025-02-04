@@ -1,0 +1,14 @@
+---
+title: "Hechos Estilizados"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+***¿Qué es un hecho estilizado?***
+
+Los hechos estilizados referentes al comportamiento del precio y del rendimiento de un activo que cotiza en una bolsa de valores, son los siguientes:
+
+## Hecho Estilizado 1:
+
+Los precios de los activos y el valor de los portafolios siguen una caminata aleatoria.
