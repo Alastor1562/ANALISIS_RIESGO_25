@@ -1,0 +1,148 @@
+---
+title: "Proyecto Final - Q"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+# Portada
+
+**DEPARTAMENTO DE MATEMÁTICAS Y FÍSICA \| MATEMÁTICAS PARA FINANZAS Y ECONOMÍA \| ANÁLISIS DE RIESGO**
+
+***PROFA. MARIA DEL ROSARIO RUIZ HERNANDEZ***
+
+![](Captura%20de%20pantalla%202025-02-05%20193104.png){width="283"}
+
+**Proyecto Final** - Qualitas Controladora S.A.B. de C.V.
+
+**Fecha:** Febrero 5, 2025
+
+**Integrantes de equipo:**
+
+-   Samuel Gómez Jiménez - 744337
+
+-   Raúl Oviedo Magaña- 744442
+
+-   Andrea Santoyo Vega -744585
+
+-   Ana Paula Moreno Haro - 744069
+
+# Part 1: Description of the asset and identification of the types of risks
+
+## Introducción
+
+En este documento se realizó un análisis detallado de Quálitas Controladora S.A.B. de C.V., incluyendo su información esencial, reportes trimestrales, clasificación de riesgos y eventos relevantes como splits de acciones.  
+
+Para ello, se recopilaron y examinaron los reportes financieros trimestrales de la empresa desde 2019 hasta 2024 a través de la plataforma Factset, calculando su Earnings Per Share (EPS) en cada periodo. Asimismo, se documentaron los splits de acciones registrados en la Bolsa Mexicana de Valores (BMV), identificando las fechas y detalles de cada evento.  
+
+Los resultados obtenidos nos permiten comprender la evolución financiera de Quálitas, sus estrategias corporativas y los riesgos a los que se enfrenta, proporcionando una visión integral de su desempeño en los últimos años.
+
+## Descripción
+
+Quálitas significa calidad en latín. Es más que sólo el nombre comercial de la compañía, es una actitud que impera en toda la organización y que gracias a ella, se ha logrado un rápido y sólido crecimiento. Fundada por el Lic. Joaquín Brockman Lozano, el 9 de diciembre de 1993 en la Ciudad de México, emitió su primera póliza el 22 de marzo de 1994 y al término de éste ya contaba con 115 agentes y 2,970 vehículos asegurados. Hoy, después de más de 28 años, Quálitas es la aseguradora mexicana líder en el mercado automotriz con más de 20 mil agentes y más de 5 millones de autos asegurados. La empresa comenzó a cotizar en la Bolsa Mexicana de Valores (BMV) el 17 de julio de 2012.
+
+Se puede observar un claro crecimiento de la compañía con el paso del tiempo. Quálitas (Q) es la compañía con mayor participación de mercado en seguros automotrices en México y cuenta con presencia en El Salvador, Costa Rica y Estados Unidos. Su modelo de negocios, especializado exclusivamente en seguro de auto, le ha permitido ofrecer un servicio de primera calidad bajo la red de cobertura más grande del país. Según la Bolsa Mexicana de valores, la empresa cuenta con calificaciones crediticias sólidas, como "AAA (mex)" por parte de Fitch Ratings y Standard & Poor's, lo que refleja su estabilidad financiera y confianza en el mercado. Esto se debe a que ha mostrado un crecimiento constante en sus primas emitidas y utilidades, impulsado por estrategias efectivas y una gestión eficiente de costos.
+
+## Quarterly Earnings Per share (EPS)
+
+A continuación, se ingresó a la plataforma de Factset para obtener los reportes trimestrales de la compañía desde 2019 y extraer los siguientes datos:
+
+-   Total Return
+
+-   Total Shares Outstanding
+
+Con estos datos se calculó el EPS con la siguiente ecuación
+
+$$
+EPS = \frac{Total Returns}{Total Shares Outstanding}
+$$
+
+**Notas:**
+
+1.  Cifras de Total Returns y Total Shares Outstanding expresadas en millones
+
+```{r, echo=FALSE}
+library(readxl)
+library(openxlsx)
+library(DT)
+library(htmlwidgets)
+
+# Leer el archivo de Excel
+df <- read_excel("Q_datos.xlsx")
+
+# Crear la tabla dinámica interactiva
+tabla_interactiva <- datatable(df, 
+                               options = list(pageLength = 10, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+# Guardar la tabla como archivo HTML
+saveWidget(tabla_interactiva, "tabla_dinamica.html", selfcontained = TRUE)
+
+tabla_interactiva
+```
+
+La empresa Quálitas ha mostrado un crecimiento en su rentabilidad por acción (EPS) desde 2018 hasta 2024, pasando de 1.5658 a 3.3915, aunque con algunas caídas en 2021 y 2022. El retorno total ha aumentado en general, con picos en 2020 y 2024, pero también con periodos de baja, especialmente en 2021 y 2022. Además, el número total de acciones ha disminuido de 422.66 a 394.98, lo que nos puede sugerir una recompra de acciones, esta estrategia suele impulsar el EPS. En general, la empresa ha mejorado su desempeño financiero, aunque con algunas fluctuaciones en el camino.
+
+## Dividendos
+
+Se documentaron los dividendos repartidos por la compañía en el pasado, obtenidos de Yahoo Finance:
+
+|             |            |
+|-------------|------------|
+| Fecha       | Dividendos |
+| 6 may 2024  | 8.00       |
+| 5 may 2023  | 5.00       |
+| 5 may 2022  | 6.50       |
+| 12 may 2021 | 4.00       |
+| 7 may 2020  | 1.70       |
+| 8 may 2019  | 0.85       |
+| 26 abr 2018 | 0.70       |
+| 25 abr 2018 | 0.70       |
+| 16 may 2017 | 0.60       |
+| 12 may 2016 | 0.50       |
+
+Durante el primer trimestre de 2024 la empresa reportó un notable aumento del 37.3% en las primas emitidas (tanto renovaciones como nuevas pólizas), lo que se tradujo en un crecimiento importante en los ingresos.
+
+Quálitas cuenta con una política que establece que, una vez cumplidos ciertos requisitos regulatorios como mantener al menos 1.5 veces el capital regulatorio se recomienda el pago de dividendos en un rango que puede ir del 40% al 90% de la utilidad neta del ejercicio anterior. Gracias a sus sólidos resultados, la empresa ha podido situarse en el extremo superior de este rango, incrementando sus dividendos de forma consistente a lo largo del tiempo.
+
+## Splits
+
+Se documentaron los splits realizados por la compañía en el pasado, obtenidos de Yahoo Finance:
+
+| **Fecha**  | Split |
+|------------|-------|
+| 17/07/2015 | 1:5   |
+
+El 15 de julio de 2015, Quálitas Controladora, S.A.B. de C.V. realizó un split de acciones con el objetivo de mejorar la liquidez de sus títulos y hacerlos más accesibles para los inversionistas. Al reducir el precio por acción, la empresa buscaba atraer a un mayor número de inversores, facilitando la compra y venta de sus acciones en el mercado.Esta estrategia es común entre las empresas que desean incrementar la liquidez de sus acciones y atraer a nuevos inversores.
+
+## Clasificación de Riesgo
+
+***Systematic risk***
+
+-   **Political risk:** Incluye cambios en regulaciones, demandas y riesgos de incumplimiento normativo. Quálitas monitorea constantemente la legislación a través de su equipo legal y sigue estrictas políticas de transparencia y cumplimiento para evitar sanciones o litigios.
+
+***Systematic - Financial risk***
+
+-   **Market risk:** Implica posibles pérdidas debido a fluctuaciones en los precios del mercado, como tasas de interés, precios de acciones o tipos de cambio. Dado que una parte de la cartera de inversiones de Quálitas está asignada a acciones, la empresa está expuesta a la volatilidad del mercado.
+
+-   **Credit risk:** La posibilidad de que una contraparte no cumpla con sus obligaciones financieras. Para Quálitas, esto podría implicar el incumplimiento de pago de las primas por parte de los asegurados o la falta de pago de entidades en las que la compañía ha invertido.
+
+-   **Liquidity risk:** Se refiere a la capacidad de Quálitas para cumplir con sus obligaciones financieras a corto plazo sin incurrir en pérdidas significativas. Para una aseguradora, el riesgo de liquidez puede surgir si la empresa no tiene suficiente efectivo o activos líquidos para pagar siniestros, obligaciones operativas o responder a retiros inesperados de capital.
+
+***Unsystematic risk / Strategic risk***
+
+-   **Operational risk:** Este riesgo surge por errores en la emisión de pólizas, gestión de siniestros o fallos en la atención al cliente. Para mitigarlo, Quálitas implementa controles internos, auditorías y automatización de procesos clave. También capacita continuamente a su personal para mejorar la eficiencia.
+
+-   **Reputation risk:** La percepción pública de Quálitas puede verse afectada por mala atención o escándalos. Para proteger su imagen, mantiene una comunicación efectiva, evalúa constantemente su calidad de servicio y cuenta con canales de respuesta rápida ante crisis.
+
+-   **Strategic risk:** Se relaciona con decisiones de negocio que pueden afectar la competitividad, como el crecimiento de los seguros digitales. Quálitas responde con análisis de mercado, diversificación de productos y mejora continua en la experiencia del cliente.
+
+-   **Security risk:** Este riesgo involucra ciberataques, fallos en sistemas y dependencia de terceros. Para mitigarlo, Quálitas usa Normas PCI-DSS, tiene planes de contingencia y recuperación, e invierte en ciberseguridad y modernización de su infraestructura digital.
+
+-   **Technical risk:** Son los riesgos asociados a la correcta valoración de las primas, el cálculo de reservas y la siniestralidad de las pólizas. Quálitas se especializa en seguros automotrices, lo que la hace altamente vulnerable a variaciones en la siniestralidad (índice en accidentes, robos y fraudes).
