@@ -146,3 +146,56 @@ El 15 de julio de 2015, Quálitas Controladora, S.A.B. de C.V. realizó un split
 -   **Security risk:** Este riesgo involucra ciberataques, fallos en sistemas y dependencia de terceros. Para mitigarlo, Quálitas usa Normas PCI-DSS, tiene planes de contingencia y recuperación, e invierte en ciberseguridad y modernización de su infraestructura digital.
 
 -   **Technical risk:** Son los riesgos asociados a la correcta valoración de las primas, el cálculo de reservas y la siniestralidad de las pólizas. Quálitas se especializa en seguros automotrices, lo que la hace altamente vulnerable a variaciones en la siniestralidad (índice en accidentes, robos y fraudes).
+
+# Part 2: Historical analysis of price and returns
+
+Descargamos los datos de precios de Q desde yahoo finance desde el día que se volvió pública hasta inicios de 2024:
+
+```{r}
+library(quantmod)
+library(lubridate)
+library(plotly)
+
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2024-01-01', env=datos)
+precio <- datos[[clave]][,6]
+```
+
+```{r}
+plot(precio,
+     type = 'l',
+     xlab = 'Fecha',
+     ylab = 'Precio',
+     main = 'Cotización de Q a tarvés del tiempo')
+```
+
+```{r}
+rendimiento <- na.omit(diff(log(precio)))
+plot(rendimiento,
+     type = 'l',
+     xlab = 'Fecha',
+     ylab = 'Rendimiento',
+     main = 'Rendimiento de Q a tarvés del tiempo')
+```
+
+```{r}
+getSymbols('^MXX', from='2015-07-17', to='2024-01-01', env=datos)
+pib <- datos[['MXX']][,6]
+```
+
+```{r}
+precio <- to.yearly(precio)[,4]
+pib <- to.yearly(pib)[,4]
+
+r_precio <- yearlyReturn(precio)
+r_pib <- yearlyReturn(pib)
+
+names(r_precio) <- 'Rendimiento Q'
+names(r_pib) <- 'Rendimiento PIB'
+
+plot(merge.xts(r_precio,r_pib),main='Comportamiento del PIB y de Q', legend.loc=
+       'bottom')
+```
+
+# Bibliografía
