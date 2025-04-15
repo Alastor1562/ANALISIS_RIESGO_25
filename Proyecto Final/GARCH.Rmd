@@ -1,0 +1,137 @@
+---
+title: "GARCH Proyecto"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(quantmod)
+library(lubridate)
+library(forecast)
+library(fGarch)
+library(rugarch)
+```
+
+```{r}
+datos <- new.env()
+clave <- "Q.MX"
+getSymbols(clave, to='2025-03-25', env=datos)
+precio <- datos[[clave]][,6]
+rendimiento <- na.omit(diff(log(precio)))
+rend_c <- rendimiento^2
+```
+
+```{r}
+ArchTest <- function (x, lags=20, demean = FALSE) 
+{
+  # Capture name of x for documentation in the output  
+  xName <- deparse(substitute(x))
+  # 
+  x <- as.vector(x)
+  if(demean) x <- scale(x, center = TRUE, scale = FALSE)
+  #  
+  lags <- lags + 1
+  mat <- embed(x^2, lags)
+  arch.lm <- summary(lm(mat[, 1] ~ mat[, -1]))
+  STATISTIC <- arch.lm$r.squared * length(resid(arch.lm))
+  names(STATISTIC) <- "Chi-squared"
+  PARAMETER <- lags - 1
+  names(PARAMETER) <- "df"
+  PVAL <- 1 - pchisq(STATISTIC, df = PARAMETER)
+  METHOD <- "ARCH LM-test;  Null hypothesis:  no ARCH effects"
+  result <- list(statistic = STATISTIC, parameter = PARAMETER, 
+                 p.value = PVAL, method = METHOD, data.name =
+                   xName)
+  class(result) <- "htest"
+  return(result)
+}
+```
+
+```{r}
+ArchTest(rendimiento)
+```
+
+```{r}
+ARIMA <- auto.arima(rendimiento)
+summary(ARIMA)
+```
+
+```{r}
+residuos <- residuals(ARIMA)
+```
+
+```{r}
+ARCH1 <- garchFit(formula =~garch(1,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(ARCH1)
+```
+
+```{r}
+ARCH2 <- garchFit(formula =~garch(2,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(ARCH2)
+```
+
+```{r}
+GARCH11 <- garchFit(formula =~garch(1,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH11)
+```
+
+```{r}
+GARCH12 <- garchFit(formula =~garch(1,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH12)
+```
+
+```{r}
+GARCH21 <- garchFit(formula =~garch(2,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH21)
+```
+
+```{r}
+GARCH22 <- garchFit(formula =~garch(2,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH22)
+```
+
+```{r}
+Est <- predict(GARCH11, n.ahead=100)
+```
+
+```{r}
+w <- GARCH11@fit[["coef"]][2]
+alpha <- GARCH11@fit[["coef"]][3]
+beta <- GARCH11@fit[["coef"]][4]
+
+VarL <- w/(1-alpha-beta)
+
+VolL <- sqrt(VarL)
+VolL
+```
+
+```{r}
+plot(Est$standardDeviation, type='l')
+abline(h=VolL, lty=2, col='blue')
+```
+
+Estimaciones no constantes
+
+```{r}
+especificaciones <- ugarchspec(mean.model = list(armaOrder=c(0,0)),
+                               variance.model = list(model='sGARCH',
+                                                       garchOrder=c(1,1)))
+```
+
+```{r}
+GARCH11_movil <- ugarchfit(spec=especificaciones, data=rendimiento)
+```
+
+```{r}
+Est_NC <- ugarchforecast(GARCH11_movil, n.ahead=100)
+```
+
+```{r}
+plot(Est_NC@forecast[["sigmaFor"]], type='l')
+abline(h=VolL, lty=2, col='blue')
+```
+
+```{r}
+plot(Est_NC@forecast[["seriesFor"]], type='l')
+```

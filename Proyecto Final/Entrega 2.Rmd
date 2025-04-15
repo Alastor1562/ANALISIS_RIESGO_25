@@ -1,0 +1,215 @@
+---
+title: "Entrega 2"
+author: "NA"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+# Portada
+
+**DEPARTAMENTO DE MATEMÁTICAS Y FÍSICA \| MATEMÁTICAS PARA FINANZAS Y ECONOMÍA \| ANÁLISIS DE RIESGO**
+
+***PROFA. MARIA DEL ROSARIO RUIZ HERNANDEZ***
+
+![](images/Captura%20de%20pantalla%202025-02-05%20193104.png)
+
+**Proyecto Final** - Qualitas Controladora S.A.B. de C.V.
+
+**Fecha:** Marzo 07, 2025
+
+**Integrantes de equipo:**
+
+-   Samuel Gómez Jiménez - 744337
+
+-   Raúl Oviedo Magaña- 744442
+
+-   Andrea Santoyo Vega -744585
+
+-   Ana Paula Moreno Haro - 744069
+
+# Part 2: Historical analysis of price and returns
+
+## Introducción
+
+Esta sección del proyecto analiza el comportamiento histórico del precio y los rendimientos de Quálitas Controladora desde su salida a bolsa hasta 2023, con el objetivo de identificar períodos de cambios significativos y sus posibles causas. Para ello, se realizó una representación gráfica de la evolución del precio y los rendimientos anuales, así como una comparación con la tasa de crecimiento del PIB de México, permitiendo evaluar la relación entre el desempeño de la empresa y el entorno macroeconómico. A través del análisis visual, se identificaron momentos clave de alzas y caídas en el precio de la acción, los cuales se contrastaron con información financiera, económica y política relevante a nivel nacional e internacional para determinar los factores que influyen en dichos movimientos. Adicionalmente, se examinaron eventos recientes del último año que han impactado el comportamiento del activo, considerando el contexto económico y financiero actual. Con este enfoque, no solo se presentan los resultados de manera cuantitativa, sino que se interpretan dentro de la realidad del mercado, proporcionando un análisis fundamentado y aplicable a la toma de decisiones financieras.
+
+## Gráficas del precio y rendimiento del activo
+
+En esta primera sección se analizaron las gráficas del precio y rendimiento de Quálitas a lo largo del tiempo. Para ello, descargamos los datos de precios de Quálitas desde la plataforma de Yahoo Finance desde el día que se volvió pública hasta incios de 2025:
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(quantmod)
+library(lubridate)
+library(plotly)
+
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-02-01', env=datos)
+precio <- datos[[clave]][,6]
+```
+
+```{r, echo=FALSE}
+plot(precio,
+     type = 'l',
+     xlab = 'Fecha',
+     ylab = 'Precio',
+     main = 'Cotización de Q a través del tiempo')
+```
+
+Se observa un crecimiento sostenido con períodos de alta volatilidad, especialmente a partir de 2020. Antes de eso, el crecimiento era más pausado y con menos fluctuaciones. En ciertos momentos, hay fuertes incrementos y caídas abruptas en el precio, lo que sugiere una alta volatilidad, característica común en los mercados financieros. Así mismo, este movimiento refleja características de una caminata aleatoria como la impredecibilidad de los movimientos y la aparente falta de un patrón sistemático claro a corto plazo, lo cúal va acorde al primer hecho estilizado sobre el movimiento del precio de los activos financieros.
+
+```{r, echo=FALSE}
+rendimiento <- na.omit(diff(log(precio)))
+hist(rendimiento, n=100, col='gray', main='Histograma del Rendimiento', prob = TRUE)
+lines(density(rendimiento), col = 'purple', lwd = 3)
+xval <- seq(min(rendimiento),max(rendimiento), length.out=100)
+lines(xval,dnorm(xval, mean = mean(rendimiento), sd = sd(rendimiento)), 
+      col = 'red', lwd = 3)
+```
+
+Los rendimientos del activo fueron calculados por medio del retorno logarítmico:
+
+$$ rt=ln(\frac{P_t}{P_{t-1}}) $$
+
+Donde:
+
+-   $rt$ =Retorno logarítmico en el tiempo t
+-   $P_t$ = Precio del activo en el tiempo t
+-   $P_{t-1}$ = Precio del activo en el tiempo t anterior
+
+Este histograma confirma que los rendimientos de la acción suele seguir una distribución con forma acampanada con la mayoría de los datos en el centro y colas más pesadas, lo que significa que las variaciones pequeñas son más frecuentes que las extremas, pero aunque raras, suceden más de lo esperado. Esto sienta las bases del supuesto de normalidad en los rendimientos de las acciones en general y comprobando el segundo hecho estilizado.
+
+```{r, echo=FALSE}
+chart_Series(to.monthly(precio))
+add_BBands()
+title(main = "Cotización de Q a través del tiempo")
+```
+
+Para este gráfico se conviertieron los datos a mensuales y se añadieron las bandas de Bollinger para analizar la volatilidad de estos. Se observa que la volatilidad se agrupa a través del tiempo, ya que muestran periodos en los que los movimientos del precio son amplios y sostenidos, seguidos de fases más tranquilas. Esto indica que los choques de volatilidad ni son constantes, ni ocurren de manera aislada, sino en clusters, las cuales son propiedades fundamentales en el 3er hecho estilizado. Podemos observar un periodo especialmente volátil a partir de mediados de 2022, por lo que sería de suma importancia buscar eventos relevantes en ese periodo para el cambio del precio del activo.
+
+```{r, echo=FALSE}
+plot(rendimiento,
+     type = 'l',
+     xlab = 'Fecha',
+     ylab = 'Rendimiento',
+     main = 'Rendimiento de Q a través del tiempo')
+```
+
+Tanto el histograma como serie de tiempo dan evidencia que los rendimientos del activo poseen leptocurtosis. Tanto en el ruido blanco como en el histograma observamos una gran cantidad de datos alrededor de la media 0, y muy pocos en los extremos, ocasionando que dicha distribución tenga colas pesadas y contraste con una distribución normal, indicando que los eventos extremos son más recurrentes de lo que uno pensaría. Dichas propiedades son clave del 4to y último hecho estilizado que se estudió en clase.
+
+```{r, echo=FALSE}
+library(readxl)    # Para leer archivos Excel
+library(xts)       # Para manejar series de tiempo en formato xts
+library(lubridate) # Para manipulación de fechas
+library(here)
+
+# Cargar datos desde el archivo Excel
+datos_excel <- read_xlsx(here("PIB.xlsx"))
+
+fechas_trimestrales <- seq(from = as.Date("2015-01-01"), 
+                           to = as.Date("2024-10-01"), 
+                           by = "quarter")
+
+datos_excel$Fecha <- fechas_trimestrales
+
+pib <- xts(datos_excel$Precio, order.by = datos_excel$Fecha)
+
+# Convertir los datos a formato anual
+year_precio <- to.yearly(precio)[, 4]  # Último valor del año
+year_pib <- to.yearly(pib)[, 4]        # Último valor del año
+
+# Calcular rendimientos anuales
+r_precio <- yearlyReturn(year_precio)
+r_pib <- yearlyReturn(year_pib)
+
+
+index(r_precio) <- as.Date(paste0(format(index(r_precio), "%Y"), "-12-31"))
+index(r_pib) <- as.Date(paste0(format(index(r_pib), "%Y"), "-12-31"))
+
+
+# Asignar nombres a las series
+names(r_precio) <- 'Rendimiento Q'
+names(r_pib) <- 'Rendimiento PIB'
+
+# Graficar los rendimientos anuales
+plot(merge.xts(r_precio, r_pib), 
+     main = 'Comportamiento del PIB y de Q', 
+     xaxt = "n", # Eliminar el eje X predeterminado
+     legend.loc = 'bottom')
+```
+
+Inicialmente podemos observar que el precio de la acción de Qualitas (Q) es mucho más volátil que el PIB. Su rendimiento muestra fuertes oscilaciones, reflejando la naturaleza del mercado bursátil, que responde a factores internos de la empresa y externos del mercado financiero; mientras tanto, el PIB de México mantiene un comportamiento estable, sin cambios bruscos a través de los años. A raiz de estas observaciones, podemos establecer que la correlación entre ambas variables no es evidente a simple vista, ya que el rendimiento de Q tiene fluctuaciones bruscas mientras que el PIB tiene una evolución más estable. Ha de notarse que en ciertos años (2019 y 2023), la acción de Q tuvo rendimientos muy altos, lo que podría estar relacionado con decisiones estratégicas de la empresa, cambios regulatorios o eventos específicos del sector asegurador en México que han de investigarse en la sección posterior.
+
+## Periodos donde el precio ha cambiado significativamente
+
+A raíz de la gráfica de precio y rendimiento del activo, buscamos los periodos de mayor volatilidad donde hubo incremento significativos o una disminución notable en el precio y rendimientos de Qualitas, de esta manera determinamos analizar el 2019, 2020, 2020, 2023 y 2024 a continuación se presenta el análisis.
+
+### 2019: Incremento en el Precio de las Acciones
+
+Quálitas logró aumentar el número de vehículos asegurados. Durante el segundo trimestre de 2019, las unidades aseguradas crecieron un 4.5% en comparación con el mismo periodo del año anterior, alcanzando un récord de 4,109,932 vehículos asegurados. (Quálitas Controladora, 2019)
+
+Quálitas centró sus esfuerzos en segmentos de mercado más rentables, lo que contribuyó a mejorar su rentabilidad. Aunque esta estrategia resultó en una ligera disminución en la participación de mercado, permitió a la empresa optimizar sus márgenes de ganancia al enfocarse en clientes y productos con mayor rentabilidad. (El Economista, 2019)
+
+### 2020: Disminución en el Precio de las Acciones
+
+En 2020, las acciones de Quálitas experimentaron una notable disminución, influenciada por varios factores relacionados con la pandemia de COVID-19: En mayo de 2020, el Instituto Nacional de Estadística y Geografía (INEGI) reportó una disminución anual del 58.96% en la venta de vehículos nuevos en México; Esta caída afectó directamente las primas emitidas por Quálitas, ya que una parte significativa de su negocio depende de la venta de seguros para vehículos nuevos.(El Economista, 2020)
+
+### 2023: Incremento Significativo
+
+La empresa mostró una mejora significativa en sus resultados financieros, especialmente en términos de utilidades. En el tercer trimestre de 2023, Quálitas reportó una utilidad neta de 1,023 millones de pesos, lo que representó un aumento del 384.5% en comparación con los 211 millones registrados en el mismo periodo del año anterior. La percepción positiva de los inversores sobre la capacidad de Quálitas para generar ganancias y su sólida posición en el mercado contribuyó al incremento en el valor de sus acciones.(Latino Insurance, 2023)
+
+### 2024: Disminución en el Precio de las Acciones
+
+Quálitas, la aseguradora automotriz más grande de México, aumentó sus ganancias 85.4% en el segundo trimestre de 2024, los mil 383 millones de pesos que la aseguradora ganó de abril a junio representaron la cantidad más elevada desde el cuarto trimestre de 2020. (El País, 2024)
+
+En septiembre de 2024, Goldman Sachs emitió un informe señalando que las acciones de Quálitas podrían caer un 13% en los próximos 12 meses, debido a factores macroeconómicos que afectarían su desempeño financiero. Esta perspectiva pesimista influyó en la percepción de los inversores y contribuyó a la caída del precio de las acciones.(Goldman Sachs, 2024)
+
+Durante 2024, la Bolsa Mexicana de Valores enfrenta desafíos significativos, incluyendo la salida de empresas importantes y una disminución en el número de compañías cotizantes. Este entorno menos favorable afectó la confianza de los inversores y contribuyó a la volatilidad en el mercado, impactando negativamente el precio de las acciones de Quálitas (El Economista, 2024)
+
+## Noticias económicas, financieras y políticas significativas del último año y su impacto en el precio
+
+En 2024, México vivió eventos políticos que impactaron a Quálitas. Las elecciones generales de junio marcaron la victoria de Claudia Sheinbaum como presidenta, pero estuvieron empañadas por más de 330 incidentes violentos. Esta inestabilidad generó incertidumbre entre los inversores, afectando la confianza en el mercado. Como resultado, el precio de las acciones de Quálitas se vio presionado a la baja.(Axis Negocios, 2024; ACLED, 2024)
+
+Además, las reformas políticas propuestas en 2024, como cambios al INE y al Poder Judicial, aumentaron las tensiones en el país. Estas iniciativas generaron preocupaciones sobre la estabilidad institucional, elevando la percepción de riesgo político. Esto contribuyó a la volatilidad en la bolsa, impactando negativamente las acciones de Quálitas.(Wikipedia, 2024;Wilson Center, 2024)
+
+El Banco de México recortó las tasas de interés de 11.25% a 10.00% durante 2024, buscando estimular la economía. Aunque esto pudo ser positivo, no logró contrarrestar la percepción general de riesgo económico y político. Así, el precio de las acciones de Quálitas siguió viéndose afectado negativamente.(Reuters, 2024)
+
+Por último, la Bolsa Mexicana de Valores enfrenta retos en 2024, con la salida de empresas y menos cotizantes. Esto incrementó la volatilidad del mercado, creando un entorno menos favorable para Quálitas. Como consecuencia, el precio de sus acciones también se vio afectado a la baja.(Yahoo Finance, s. f.)
+
+# Bibliografía
+
+Quálitas Controladora, S.A.B. de C.V. (2019). Reporte de Resultados del Segundo Trimestre de 2019. Recuperado de: qinversionistas.qualitas.com.mx
+
+El Economista. (2019). Acciones de Quálitas mantienen firmeza pese a bajas en el mercado. Recuperado de eleconomista.com.mx
+
+El Economista. (2020). El efecto del Covid-19 en Quálitas. Recuperado de eleconomista.com.mx Latino Insurance. (2023). Quálitas: ¿por qué las acciones de la aseguradora son las que más suben en la BMV?. Recuperado de boletines.latinoinsurance.com
+
+Qualitas \| Nuestra acción - dividendo. (s. f.). Recuperado de qinversionistas.qualitas.com.mx
+
+Yahoo Finance. (s. f.). Recuperado de es.finance.yahoo.com
+
+Historia - Qualitas MX - Qualitas. (s. f.). Recuperado de qualitas.com.mx
+
+¿Por qué Quálitas? - Qualitas MX - Qualitas. (s. f.). Recuperado de qualitas.com.mx
+
+Goldman Sachs. (2024). Quálitas caería 13% en la BMV; acción más pesimista en Latam. Recuperado de elceo.com
+
+El Economista. (2024). Bolsa mexicana cae tras cuatro días de avances; Quálitas lidera las bajas. Recuperado de: <https://www.eleconomista.com.mx/mercados/Bolsa-mexicana-cae-tras-cuatro-dias-de-avances-Qualitas-lidera-las-bajas-20240812-0031.html>
+
+El País. (2024). La Bolsa cumple 130 años con pocos jugadores y las acciones de Elektra en picada. Recuperado de: elpais.com
+
+Axis Negocios (2024). Quálitas reportó en el segundo trimestre sus mayores ganancias de los últimos cuatro años. Recuperado de: Quálitas reporta en el segundo trimestre sus mayores ganancias de los últimos cuatro años — Noticias empresas.
+
+Fuente: ACLED. (2024, 2 de julio). Five key takeaways from the 2024 elections in Mexico. <https://acleddata.com/2024/07/02/five-key-takeaways-from-the-2024-elections-in-mexico/>
+
+Wikipedia. (2024). 2024 Mexican general election. <https://en.wikipedia.org/wiki/2024_Mexican_general_election>
+
+Wilson Center. (2024). Election 2024: Continuity and change in Mexico’s political and economic landscape. <https://www.wilsoncenter.org/article/election-2024-continuity-and-change-mexicos-political-and-economic-landscape>
+
+BBVA Research. (2024, noviembre). Mexico economic outlook: November 2024. <https://www.bbvaresearch.com/en/publicaciones/mexico-economic-outlook-november-2024/>
+
+Reuters. (2024, 19 de diciembre). Bank of Mexico lowers key interest rate, opens door to larger cuts. <https://www.reuters.com/markets/rates-bonds/bank-mexico-lowers-key-interest-rate-opens-door-larger-cuts-2024-12-19/>

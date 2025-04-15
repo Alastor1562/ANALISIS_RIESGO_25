@@ -1,0 +1,127 @@
+---
+title: 'HW 11: Volatilidad Implícita'
+author: "Sam"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+***¿Qué es la volatilidad implícita?***
+
+La volatilidad implícita es una estimación de la volatilidad futura de un activo financiero, obtenida a partir de los precios de sus opciones. A diferencia de la volatilidad histórica (calculada con datos pasados), la implícita refleja la percepción del mercado sobre cuánto se moverá el precio del activo en el futuro.
+
+***¿Cómo se mide?***
+
+La volatilidad implícita no se observa directamente, sino que se calcula invirtiendo un modelo de valoración de opciones, como el modelo de Black-Scholes. Se toma el precio actual de una opción en el mercado y se busca la volatilidad que, al aplicarse en la fórmula del modelo, genera ese mismo precio.
+
+Ecuación de Black-Scholes (para una opción call europea):
+
+$$
+C = S_0 N(d_1) - K e^{-rT} N(d_2)
+$$
+
+$$
+d_1 = \frac{\ln(S_0 / K) + \left(r + \frac{1}{2} \sigma^2\right) T}{\sigma \sqrt{T}}, \quad
+d_2 = d_1 - \sigma \sqrt{T}
+$$
+
+# Preparación de datos
+
+Descargamos las paqueterías necesarias:
+
+```{r include=FALSE}
+library(quantmod)
+library(lubridate)
+library(derivmkts)
+library(readxl)
+library(tibble)
+library(dplyr)
+```
+
+Preparé un excel con los datos de precio de ejercicio y costo de la prima del call que descargué de Facset junto a los demás datos que ocupaba:
+
+```{r}
+HW11 <- read_excel("HW11.xlsx")
+
+S0 <- 56.95
+r <- 0.09
+t <- 165/365
+d <- 0
+k <- as.numeric(HW11$k)
+c <- as.numeric(HW11$c)
+```
+
+Creamos una tabla vacía donde colocar las estimaciones de volatilidad:
+
+```{r}
+resultados <- tibble(
+  Supuesto_BS = character(),
+  Vol_imp = character(),
+  Precio_Ejercicio = numeric()
+)
+```
+
+# Cálculo de Volatilidad Implícita
+
+```{r}
+for (i in 1:length(k)) {
+  supuesto <- ifelse(c[i]>=max(0, S0-k[i]*exp(-r*t)), 'Se cumple', 'No se cumple')
+  
+  vol <- tryCatch({
+    vol_num <- bscallimpvol(s = S0, k = k[i], r = r, tt = t, d = d, price = c[i])
+    as.character(vol_num)  # convertir explícitamente a texto
+  }, error = function(e) {
+    "Error: fuera de rango"  # texto para errores
+  })
+  
+  resultados <- add_row(resultados, 
+                        Supuesto_BS = supuesto, 
+                        Vol_imp = vol,
+                        Precio_Ejercicio = k[i])
+}
+
+resultados
+```
+
+Eliminamos las filas que no cumplieron el principio de B&S y revisamos que tengamos suficientes datos para el análisis ($n\geq 10$):
+
+```{r}
+resultados <- resultados |> 
+  filter(Supuesto_BS != "No se cumple")
+
+nrow(resultados)
+```
+
+Calculamos la volatilidad hiostórica del activo:
+
+```{r}
+clave <- 'WALMEX.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-04-07', env=datos)
+precio <- datos[[clave]][,6]
+
+rend <- na.omit(diff(log(precio)))
+vol_hist <- sd(rend)*sqrt(252)
+
+vol_hist
+```
+
+# Visualización de resultados
+
+```{r}
+plot(resultados$Precio_Ejercicio, as.numeric(resultados$Vol_imp), 
+     main = "Relación de Precio de Ejercicio con su Volatilidad Implícita",
+     xlab = "Precio de Ejercicio", 
+     ylab = "Volatilidad Implícita", 
+     pch=19, 
+     col = "darkorchid", 
+     ylim = c(0.21, 0.27))
+
+abline(h=vol_hist, lty=2, col='blue')
+```
+
+# Conclusiones
+
+El mercado está valorando las opciones call de Walmex con una volatilidad implícita menor a la histórica, y dicha volatilidad tiende a disminuir conforme el precio de ejercicio k aumenta. Esta caída refleja menos expectativas de subidas grandes en la acción. Por eso decimos que el mercado tiene una visión bajista o conservadora, porque no está dispuesto a pagar mucho por opciones que solo valen si la acción sube bastante.

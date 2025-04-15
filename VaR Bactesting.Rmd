@@ -1,0 +1,54 @@
+---
+title: "VaR bactesting"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Vamos a comparar el VaR al 99% de los métodos
+
+```{r include=FALSE}
+library(quantmod)
+library(tibble)
+```
+
+```{r}
+VaR_P <- -2370
+VaR_NP <- -2511
+```
+
+```{r}
+clave <- c('PINFRA.MX','SORIANAB.MX')
+datos <- new.env()
+getSymbols(clave, from='2000-01-01',env=datos)
+precio_pinfra <- datos[[clave[1]]][,6]
+precio_soriana <- datos[[clave[2]]][,6]
+
+v_hist <- 300*precio_pinfra + 200*precio_soriana
+names(v_hist) <- 'Valor_Portafolio'
+v_hist
+```
+
+Ganancia o pérdida real observada
+
+```{r}
+g_p <- na.omit(diff(v_hist))
+```
+
+Contar excepeciones (el número de veces que el VaR se quedó por debajo de la pérdida real)
+
+Paramétrico:
+
+```{r}
+BTP <- ifelse(g_p<VaR_P,1,0)
+sum(BTP) / length(BTP) * 100
+```
+
+Este valor significa que un 0.17% de las veces históricas el VaR se quedó muy por debajo (es decir, se equivocó), por lo cuál mi estimación de VaR Paramétrico es adecuado porque se mantuvo debajo del 1% de excepciones.
+
+No Paramétrico:
+
+```{r}
+BTNP <- ifelse(g_p<VaR_NP,1,0)
+sum(BTNP)  / length(BTNP) * 100
+```

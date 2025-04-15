@@ -1,0 +1,291 @@
+---
+title: "Entrega 4"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(quantmod)
+library(TTR)
+library(tibble)
+library(lubridate)
+library(tidyverse)
+library(fTrading)
+library(xts)
+library(forecast)
+library(fGarch)
+library(rugarch)
+library(dplyr)
+library(purrr)
+```
+
+```{r}
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, env=datos)
+precio <- datos[[clave]][,6]
+
+rendimiento <- na.omit(diff(log(precio)))
+rend_c <- rendimiento^2
+```
+
+# Promedio Móvil
+
+```{r}
+var_5 <- SMA(rend_c, n=6)
+var_10 <- SMA(rend_c, n=11)
+var_20 <- SMA(rend_c, n=21)
+var_40 <- SMA(rend_c, n=41)
+```
+
+```{r}
+RMSE <- tibble(
+  'm=5' = sqrt(mean((na.omit(rend_c-var_5))^2)),
+  'm=10' = sqrt(mean((na.omit(rend_c-var_10))^2)),
+  'm=20' = sqrt(mean((na.omit(rend_c-var_20))^2)),
+  'm=40' = sqrt(mean((na.omit(rend_c-var_40))^2))
+)
+RMSE
+```
+
+```{r}
+EAMP <- tibble(
+  'm=5' = mean(abs(na.omit(rend_c-var_5))),
+  'm=10' = mean(abs(na.omit(rend_c-var_10))),
+  'm=20' = mean(abs(na.omit(rend_c-var_20))),
+  'm=40' = mean(abs(na.omit(rend_c-var_40)))
+)
+EAMP
+```
+
+```{r}
+w <- merge.xts(((na.omit(var_5-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_10-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_20-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_40-rend_c))/(na.omit(rend_c)))^2
+               )
+
+w <- subset(w, w$Q.MX.Adjusted != 'Inf' | 
+              w$Q.MX.Adjusted.1 != 'Inf'|
+              w$Q.MX.Adjusted.2 != 'Inf'|
+              w$Q.MX.Adjusted.3 != 'Inf')
+
+ECPP <- sqrt(colMeans(na.omit(w)))
+ECPP
+```
+
+```{r}
+m <- 5
+```
+
+```{r}
+fecha_inicio <- "2025-03-12"
+fecha_fin <- "2025-04-06"
+
+predicciones_pm <- tibble(Fecha = as.Date(character()), Prediccion_PM = numeric())
+
+fechas <- seq(ymd(fecha_inicio), ymd(fecha_fin), by = "days")
+
+for (i in fechas) {
+    datos <- new.env()
+    getSymbols(clave, to = i, env = datos)
+    precio <- datos[[clave]][,6]
+
+    rend <- na.omit(diff(log(precio)))
+    rend_c <- rend^2
+
+    m <- 5
+
+    fecha_est <- date(tail(precio, 1)) + 1
+    
+    if (wday(fecha_est) == 7) {
+      fecha_est <- fecha_est + 2
+    } else if (wday(fecha_est) == 1) {
+      fecha_est <- fecha_est + 1
+    }
+    
+    V_est <- sqrt(mean(tail(rend_c, m)))
+
+    if (any(fecha_est %in% predicciones_pm$Fecha)) {}
+    else{
+        nueva_fila <- tibble(Fecha = as.Date(fecha_est), Prediccion_PM = V_est)
+        predicciones_pm <- bind_rows(predicciones_pm, nueva_fila)
+        }
+    }
+
+predicciones_pm
+```
+
+# EWMA
+
+```{r}
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-03-14', env=datos)
+precio <- datos[[clave]][,6]
+
+rend <- na.omit(diff(log(precio)))
+rend_c <- rend^2
+```
+
+```{r}
+L <- seq(0.11,0.99,0.01)
+
+fun_ver <- matrix(0, nrow = nrow(rend_c), ncol=1)
+Res <- matrix(0, nrow = length(L), ncol=2)
+c <- 1
+
+var_est <- matrix(0, nrow=nrow(rend_c), ncol=1)
+var_est[1,1] <- rend_c[1,1]
+
+for (l in L){
+  
+  for (i in 2:nrow(rend_c)){
+    var_est[i,1] <- (1-l)*rend_c[i-1,1]+l*var_est[i-1,1]
+    fun_ver[i,1] <- (-log(var_est[i,1])-(rend_c[i,1]/var_est[i,1]))
+  }
+  
+  Res[c,1] <- l
+  Res[c,2] <- sum(fun_ver)
+  c <- c + 1
+  
+}
+
+colnames(Res) <- c('Lambda', 'FnVer')
+Loptimo <- Res[order(Res[,'FnVer'], decreasing = TRUE)][1]
+Loptimo
+```
+
+```{r}
+fecha_inicio <- "2025-03-13"
+fecha_fin <- "2025-04-06"
+
+predicciones_ewma <- tibble(Fecha = as.Date(character()), Prediccion_EWMA = numeric())
+
+fechas <- seq(ymd(fecha_inicio), ymd(fecha_fin), by = "days")
+
+for (i in fechas) {
+    datos <- new.env()
+    getSymbols(clave, to = i, env = datos)
+    precio <- datos[[clave]][,6]
+
+    rend <- na.omit(diff(log(precio)))
+    rend_c <- rend^2
+
+    var_est_op <- xts(emaTA(rend_c, Loptimo), order.by = date(rend_c))
+
+    vol_futura <- sqrt((1-Loptimo)*as.numeric(last(rend_c))
+                   +Loptimo*as.numeric(last(var_est_op)))
+    
+    fecha_est <- date(tail(precio, 1)) + 1
+    
+    if (wday(fecha_est) == 7) {
+      fecha_est <- fecha_est + 2
+    } else if (wday(fecha_est) == 1) {
+      fecha_est <- fecha_est + 1
+    }
+
+    if (any(fecha_est %in% predicciones_ewma$Fecha)) {}
+    else{
+        nueva_fila <- tibble(Fecha = as.Date(fecha_est), Prediccion_EWMA = vol_futura)
+        predicciones_ewma <- bind_rows(predicciones_ewma, nueva_fila)
+        }
+    }
+
+predicciones_ewma
+```
+
+# ARCH-GARCH
+
+```{r}
+ArchTest <- function (x, lags=20, demean = FALSE) 
+{
+  # Capture name of x for documentation in the output  
+  xName <- deparse(substitute(x))
+  # 
+  x <- as.vector(x)
+  if(demean) x <- scale(x, center = TRUE, scale = FALSE)
+  #  
+  lags <- lags + 1
+  mat <- embed(x^2, lags)
+  arch.lm <- summary(lm(mat[, 1] ~ mat[, -1]))
+  STATISTIC <- arch.lm$r.squared * length(resid(arch.lm))
+  names(STATISTIC) <- "Chi-squared"
+  PARAMETER <- lags - 1
+  names(PARAMETER) <- "df"
+  PVAL <- 1 - pchisq(STATISTIC, df = PARAMETER)
+  METHOD <- "ARCH LM-test;  Null hypothesis:  no ARCH effects"
+  result <- list(statistic = STATISTIC, parameter = PARAMETER, 
+                 p.value = PVAL, method = METHOD, data.name =
+                   xName)
+  class(result) <- "htest"
+  return(result)
+}
+```
+
+```{r}
+ArchTest(rendimiento)
+```
+
+```{r}
+ARIMA <- auto.arima(rendimiento)
+summary(ARIMA)
+```
+
+```{r}
+residuos <- residuals(ARIMA)
+```
+
+```{r}
+ARCH1 <- garchFit(formula =~garch(1,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(ARCH1)
+```
+
+```{r}
+ARCH2 <- garchFit(formula =~garch(2,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(ARCH2)
+```
+
+```{r}
+GARCH11 <- garchFit(formula =~garch(1,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH11)
+```
+
+```{r}
+GARCH12 <- garchFit(formula =~garch(1,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH12)
+```
+
+```{r}
+GARCH21 <- garchFit(formula =~garch(2,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH21)
+```
+
+```{r}
+GARCH22 <- garchFit(formula =~garch(2,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
+summary(GARCH22)
+```
+
+```{r}
+Est_arch <- predict(GARCH11, n.ahead=nrow(predicciones_pm)-7)
+
+ultimas_fechas <- tail(predicciones_pm$Fecha, nrow(predicciones_pm)-7)
+
+predicciones_arch <- tibble(
+  Fecha = ultimas_fechas,
+  Prediccion_ARCH11 = Est_arch$standardDeviation
+)
+
+predicciones_arch
+```
+
+# Resultados
+
+```{r}
+combinado <- full_join(predicciones_pm, predicciones_ewma, by = "Fecha")
+
+combinado <- full_join(combinado, predicciones_arch, by = "Fecha")
+
+print(combinado)
+```

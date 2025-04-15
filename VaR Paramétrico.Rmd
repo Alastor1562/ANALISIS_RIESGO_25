@@ -1,0 +1,85 @@
+---
+title: "VaR Paramétrico"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r include=FALSE}
+library(quantmod)
+library(tibble)
+```
+
+# Introducción
+
+Supongamos que tenemos un portafolio que tiene las siguientes características:
+
+-   300 acciones de PINFRA
+
+-   200 acciones de SORIANA
+
+```{r}
+clave <- c('PINFRA.MX','SORIANAB.MX')
+datos <- new.env()
+getSymbols(clave, from='2021-08-05', to = '2025-04-08',env=datos)
+precio_pinfra <- datos[[clave[1]]][,6]
+precio_soriana <- datos[[clave[2]]][,6]
+
+V0 <- as.numeric(300*last(precio_pinfra) + 200*last(precio_soriana))
+V0
+```
+
+```{r}
+rend_pinfra <- na.omit(diff(log(precio_pinfra)))
+rend_soriana <- na.omit(diff(log(precio_soriana)))
+```
+
+Matriz de Varianza Covarianza
+
+```{r}
+R <- merge.xts(rend_pinfra, rend_soriana)
+covarianza <- cov(R)
+covarianza
+```
+
+Ahora los pesos
+
+```{r}
+wp <- 300*last(precio_pinfra) / V0
+ws <- 200*last(precio_soriana) / V0
+w <- as.numeric(c(wp, ws))
+w
+```
+
+Valor de Z
+
+```{r}
+z90 <- qnorm(0.1)
+z99 <- qnorm(0.01)
+z95 <- qnorm(0.05)
+```
+
+Hacer la multiplicación
+
+```{r}
+vol_p <- sqrt(w%*%covarianza%*%w)
+vol_p
+```
+
+Calcular el VaR
+
+```{r}
+VaR90 <- V0*z90*vol_p
+VaR95 <- V0*z95*vol_p
+VaR99 <- V0*z99*vol_p
+```
+
+```{r}
+VaR <- tibble(
+  VaR_90 = VaR90, 
+  VaR_95 = VaR95,
+  VaR_99 = VaR99
+  )
+
+VaR
+```

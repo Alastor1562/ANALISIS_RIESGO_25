@@ -1,0 +1,411 @@
+---
+title: "Entrega 3"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+# Portada
+
+**DEPARTAMENTO DE MATEMÁTICAS Y FÍSICA \| MATEMÁTICAS PARA FINANZAS Y ECONOMÍA \| ANÁLISIS DE RIESGO**
+
+***PROFA. MARIA DEL ROSARIO RUIZ HERNANDEZ***
+
+![](images/Captura%20de%20pantalla%202025-02-05%20193104.png)
+
+**Proyecto Final** - Qualitas Controladora S.A.B. de C.V.
+
+**Fecha:** Marzo 21, 2025
+
+**Integrantes de equipo:**
+
+-   Samuel Gómez Jiménez - 744337
+
+-   Raúl Oviedo Magaña- 744442
+
+-   Andrea Santoyo Vega -744585
+
+-   Ana Paula Moreno Haro - 744069
+
+# **Part 3: Returns and volatility. Normality tests and estimation of probabilities**
+
+En esta entrega del proyecto, se analizan los rendimientos y la volatilidad de la acción de Quálitas, considerando tanto su comportamiento diario como su proyección anualizada. Además, se realizan pruebas de normalidad y simulaciones para estimar la evolución futura del precio del activo.
+
+Primero, se estima el rendimiento medio y la volatilidad del activo de manera diaria y anualizada, proporcionando una visión cuantitativa general de su comportamiento histórico. Sobre dicha información se evalúan si los rendimientos, el precio y el logaritmo del precio siguen una distribución normal, lo cual es un supuesto clave en muchos modelos financieros.
+
+A partir de los parámetros diarios, se genera una simulación basada en procesos estocásticos para estimar la evolución del precio en distintos horizontes dados en días; y a su vez, utilizando parámetros anuales, se simula la evolución del precio en horizontes mensuales, con la finalidad de evaluar posibles escenarios futuros y calcular intervalos de confianza.
+
+Finalmente, se comparan los resultados obtenidos con las expectativas teóricas, analizando las implicaciones de los supuestos asumidos y su aplicabilidad a los datos reales. Este análisis es clave para comprender la validez de los modelos financieros empleados y su utilidad en la predicción del comportamiento del activo en estudio.
+
+```{r Paquetes, message=FALSE, warning=FALSE}
+library(quantmod)
+library(lubridate)
+library(moments)
+library(dplyr)
+library(DT)
+library(htmlwidgets)
+```
+
+```{r message=FALSE, warning=FALSE}
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-03-19', env=datos)
+precio <- datos[[clave]][,6]
+
+rendimiento <- na.omit(diff(log(precio)))
+```
+
+## Parámetros de Rendimiento y Volatilidad
+
+En esta sección, se calculan los principales parámetros estadísticos del rendimiento diario de la acción de Quálitas a emplear en simulaciones en un apartado posterior. En particular, se obtiene el rendimiento medio diario y anualizado, así como la volatilidad diaria y anual.
+
+Para ello, se utiliza el conjunto de datos de rendimientos, agrupando los valores por año y aplicando las siguientes métricas:
+
+-   **Rendimiento Diario:** Media de los rendimientos diarios dentro de cada año. Se utilizó la fórmula de diferencia de logaritmo de los precios de cierre:
+
+$$ 
+  R_t=ln(P_t)-ln(P_{t-1})
+  $$
+
+-   **Volatilidad Diaria:** Desviación estándar de los rendimientos diarios.
+
+-   **Rendimiento Anualizado:** Rendimiento diario multiplicado por 252 (\# días hábiles en un año), considerando el número aproximado de días hábiles en un año.
+
+-   **Volatilidad Anualizada:** Volatilidad diaria escalada por la raíz cuadrada de 252, lo que permite obtener una medida comparable en términos anuales.
+
+```{r}
+names(rendimiento) <- 'rend'
+params <- rendimiento |> 
+  as_tibble() |> 
+  mutate(Año = year(rendimiento)) |> 
+  group_by(Año) |> 
+  summarise('Ren_Diario' = mean(rend),
+            'Vol_Diario' = sd(rend),
+            'Ren_Anual' = mean(rend) * 252,
+            'Vol_Anual' = sd(rend) * sqrt(252))
+
+params <- datatable(params, 
+                               options = list(pageLength = 11, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+saveWidget(params, "tabla_dinamica.html", selfcontained = TRUE)
+
+params
+```
+
+Este resumen de rendimientos y volatilidad del activo a lo largo de los años nos muestra que el activo ha experimentado periodos de considerablemente alta rentabilidad a lo largo del tiempo, especialmente en 2020 cuando se dió el inicio de la pandemia. La volatilidad varía considerablemente entre los años, reflejando cambios en el riesgo del mercado, y a su vez, su relación con el rendimiento sugiere que los mayores retornos vienen acompañados de mayor incertidumbre, lo cuál es exactamente lo que quisieramos ver de acuerdo a la teoría.
+
+## Pruebas de Normalidad
+
+En esta sección, se realizan pruebas de normalidad sobre tres variables clave: el rendimiento, el precio y el logaritmo del precio de la acción. Evaluar la normalidad de estas distribuciones es crucial, ya que muchos modelos financieros asumen que los rendimientos siguen una distribución normal.
+
+La metodología a emplear aquí es la **prueba de Jarque-Bera**, la cual evalúa si los datos siguen una distribución normal comparando su asimetría (**skewness**) y curtosis (**kurtosis**) con los valores esperados bajo una distribución normal.
+
+-   La **hipótesis nula** ($H_0$) de la prueba establece que los datos siguen una distribución normal
+
+-   La **hipótesis alternativa** ($H_i$) indica que los datos no son normales
+
+Si el **p-valor** resultante es menor al alpha empleado (en este caso 0.05), se rechaza la hipótesis nula, lo que sugiere que los datos no siguen una distribución normal. Dado que muchos modelos financieros dependen de la normalidad para la estimación de riesgo y valoración de activos, estas pruebas ayudan a determinar la validez de ciertos supuestos a discutir a raiz de los resultados de estas pruebas.
+
+```{r}
+jarque.test(as.numeric(rendimiento))
+```
+
+La prueba nos da un p-value \< 2.2e-16 por lo tanto se rechaza la hipótesis nula, lo que indica que los rendimientos no siguen una distribución normal, pero se aproximan a la forma de una. Esta diferencia se debe a que la distribución de los rendimientos tienen muchos datos cercanos a la media y tienen las colas mas pesadas porque tienen leptocurtosis. 
+
+```{r}
+jarque.test(as.numeric(precio))
+```
+
+Aplicando el test para precio nos da un p-value \< 2.2e-16 por lo tanto, se acepta que no hay normalidad en la distribución de precios. 
+
+```{r}
+jarque.test(as.numeric(log(precio)))
+```
+
+En el siguiente caso aplicando la prueba de normalidad para el logaritmo del precio nos da un p-value \< 2.2e-16, por lo tanto también se rechaza la normalidad en los log-precios, pero el valor del test es menor en comparación con los precios originales y los rendimientos, lo que sugiere que la transformación logarítmica reduce la no normalidad. 
+
+## Prueba de Rendimiento Diario = 0
+
+En esta sección, se evalúa si el rendimiento medio diario del activo es significativamente diferente de cero. Este análisis es clave para determinar si, efectivamente, el rendimiento diario de una acción puede considerarse cercano a 0.
+
+Para ello, se emplea una **prueba t**, la cual compara la media de una muestra de datos con un valor de referencia (en este caso, 0). La prueba se basa en la siguiente hipótesis:
+
+-   $H_0$ : El rendimiento medio diario es igual a 0.
+
+-   $H_i$ : El rendimiento medio diario es diferente de 0.
+
+Se utiliza una prueba **bilateral** (*de 2 colas*), lo que significa que se evalúa tanto si el rendimiento es significativamente mayor o menor que cero.
+
+Si el **p-valor** obtenido es menor a alpha (0.01 para esta prueba), se rechaza la hipótesis nula, indicando que el rendimiento diario tiene una diferencia significativa respecto a cero. En caso contrario, no se encuentra evidencia suficiente para rechazar la hipótesis de que el rendimiento medio diario es nulo.
+
+```{r}
+t.test(as.numeric(rendimiento), mu = 0, alternative = 'two.sided')
+```
+
+Dado que el p-valor es mayor a 0.01, se falla en rechaza la hipótesis nula al 1% de significancia, lo que indica que el rendimiento diario medio es estadísticamente igual a 0, lo cuál es un principio fundamental para futuros modelos.
+
+## Simulaciones del Cambio de Precio (dS)
+
+En esta sección, se realiza una simulación del cambio de precio utilizando un modelo estocástico basado en el **Movimiento Browniano Geométrico.**
+
+Los parámetros estimados a emplear son:
+
+-   Media diaria del rendimiento ($\mu_{diaria}$): Representa el crecimiento esperado del precio
+
+-   Volatilidad diaria ($\sigma_{diaria}$): Mide la dispersión de los rendimientos en torno a su media
+
+-   Precio inicial ($S_0$): Último precio registrado en los datos históricos
+
+Para la simulación, se generan **100,000 trayectorias aleatorias** del cambio de precio (dS) a lo largo de **10, 20 y 40 días** ($dt=10,20,40$). Se utiliza una distribución normal para modelar la aleatoriedad de los cambios de precio, siguiendo la ecuación:
+
+$$
+dS=S_0 \cdot \mu_{diaria} \cdot dt + S_0 \cdot \sigma_{diaria} \cdot dW
+$$
+
+donde dW representa un **proceso de Wiener** (ruido aleatorio) del modelo.
+
+Finalmente, se calculan los intervalos de confianza al **95%** para las predicciones del precio futuro, proporcionando un rango probable dentro del cual se espera que fluctúe el precio del activo en el horizonte de tiempo simulado. La formula a emplear para el intervalo es la siguiente:
+
+-   Límite inferior:$LI = S_0 + E[dS] - Z_{a/2} * \sigma_{dS}$
+
+-   Límite superior:$LS = S_0 + E[dS] + Z_{a/2} * \sigma_{dS}$
+
+```{r}
+mu_diaria <- mean(rendimiento)
+sigma_diaria <- sd(rendimiento)
+
+So <- as.numeric(precio[length(precio)])
+```
+
+### Proyección a 10 días
+
+```{r}
+set.seed(42)
+
+sim <- 100000
+
+dt <- 10
+
+dW <- sqrt(dt)*rnorm(sim)
+dS <- So*mu_diaria*dt + So*sigma_diaria*dW
+
+li <- So + mean(dS) - 1.96*sd(dS)
+ls <- So + mean(dS) + 1.96*sd(dS)
+
+c(li, ls)
+```
+
+### Proyección a 20 días
+
+```{r}
+set.seed(42)
+
+dt <- 20
+
+dW <- sqrt(dt)*rnorm(sim)
+dS <- So*mu_diaria*dt + So*sigma_diaria*dW
+
+li <- So + mean(dS) - 1.96*sd(dS)
+ls <- So + mean(dS) + 1.96*sd(dS)
+
+c(li, ls)
+```
+
+### Proyección a 40 días
+
+```{r}
+set.seed(42)
+
+dt <- 40
+
+dW <- sqrt(dt)*rnorm(sim)
+dS <- So*mu_diaria*dt + So*sigma_diaria*dW
+
+li <- So + mean(dS) - 1.96*sd(dS)
+ls <- So + mean(dS) + 1.96*sd(dS)
+
+c(li, ls)
+```
+
+Resumen de los resultados:
+
+|          |                                  |
+|:--------:|:--------------------------------:|
+| ***dt*** | ***Intervalo de Confianza 95%*** |
+|   10     |        [158.35, 200.13]          |
+|   20     |        [151.24, 210.33]          |
+|   40     |        [142.10, 225.66]          |
+
+A medida que dt aumenta, el intervalo de confianza se ensancha. Para dt=10, el rango es más estrecho, mientras que para dt=20, el intervalo crece y para dt=40, se amplía considerablemente. Esto ocurre porque la incertidumbre del precio aumenta con el tiempo. A mayor dt, el impacto del componente aleatorio dW es mayor, lo que hace que la varianza de la distribución de precios crezca y el intervalo de confianza se vuelva más amplio. 
+
+Además, aunque el precio medio proyectado tiende a aumentar con dt, la mayor volatilidad hace que la dispersión también se incremente. Como resultado, cuanto mayor es el horizonte de tiempo, mayor es la incertidumbre en los precios futuros y más amplio el intervalo de confianza. 
+
+Esto refleja el principio fundamental de que la incertidumbre en las predicciones de precios aumenta con el tiempo, lo que tiene implicaciones clave en la gestión del riesgo y la planificación de inversiones. 
+
+## Simulaciones del Precio ( lnSt)
+
+En esta sección, se realiza una simulación del precio futuro. Para ellos transformamos el modelo estocástico anterior empleando el **Lema de Ito**.
+
+Los parámetros estimados a emplear son:
+
+-   Media anual del rendimiento ($\mu_{anual}$)
+
+-   Volatilidad anual ($\sigma_{anual}$)
+
+-   Precio inicial ($S_0$)
+
+Para la simulación, se generan **100,000 trayectorias aleatorias** del logaritmo del precio esperado a lo largo de **3, 6, 9 y 12 meses** ($dt=\frac{3}{12}, \frac{6}{12}, \frac{9}{12}, 1$). La ecuación a modelar será la siguiente:
+
+$$ ln(St) = ln(So) + (\mu_{anual} - \frac{1}{2} \cdot \sigma_{anual}^2)dt + \sigma_{anual} dW $$
+
+Finalmente, se calculan los intervalos de confianza al **95%** para las predicciones del precio futuro, proporcionando un rango probable dentro del cual se espera que fluctúe el precio del activo en el horizonte de tiempo simulado.
+
+La fórmula a emplear para los intervalos es la siguiente:
+
+-   Límite inferior: $LI = E[St] - Z_{a/2} * \sigma_{St}$
+
+-   Límite superior: $LS = E[St] + Z_{a/2} * \sigma_{St}$
+
+```{r}
+mu_anual <- mean(rendimiento)*252
+sigma_anual <- sd(rendimiento)*sqrt(252)
+```
+
+### Proyección a 3 meses
+
+```{r}
+set.seed(42)
+
+T <- 1
+dt <- T/252
+t <- seq(0,T, length.out=252)
+
+ln_p_final <- numeric(sim)
+
+for (i in 1:sim) {
+  W <- c(0,cumsum(sqrt(dt)*rnorm(251)))
+  lnSt <- log(So) + (mu_anual-0.5*sigma_anual^2)*t + sigma_anual*W
+  ln_p_final[i] <- lnSt[252*3/12]
+}
+
+p_final <- exp(ln_p_final)
+
+li <- mean(p_final) - 1.96*sd(p_final)
+ls <- mean(p_final) + 1.96*sd(p_final)
+
+c(li, ls)
+```
+
+### Proyección a 6 meses
+
+```{r}
+set.seed(42)
+
+T <- 1
+dt <- T/252
+t <- seq(0,T, length.out=252)
+
+ln_p_final <- numeric(sim)
+
+for (i in 1:sim) {
+  W <- c(0,cumsum(sqrt(dt)*rnorm(251)))
+  lnSt <- log(So) + (mu_anual-0.5*sigma_anual^2)*t + sigma_anual*W
+  ln_p_final[i] <- lnSt[252*6/12]
+}
+
+p_final <- exp(ln_p_final)
+
+li <- mean(p_final) - 1.96*sd(p_final)
+ls <- mean(p_final) + 1.96*sd(p_final)
+
+c(li, ls)
+```
+
+### Proyección a 9 meses
+
+```{r}
+set.seed(42)
+
+T <- 1
+dt <- T/252
+t <- seq(0,T, length.out=252)
+
+ln_p_final <- numeric(sim)
+
+for (i in 1:sim) {
+  W <- c(0,cumsum(sqrt(dt)*rnorm(251)))
+  lnSt <- log(So) + (mu_anual-0.5*sigma_anual^2)*t + sigma_anual*W
+  ln_p_final[i] <- lnSt[252*9/12]
+}
+
+p_final <- exp(ln_p_final)
+
+li <- mean(p_final) - 1.96*sd(p_final)
+ls <- mean(p_final) + 1.96*sd(p_final)
+
+c(li, ls)
+```
+
+### Proyección a 12 meses
+
+```{r}
+set.seed(42)
+
+T <- 1
+dt <- T/252
+t <- seq(0,T, length.out=252)
+
+ln_p_final <- numeric(sim)
+
+for (i in 1:sim) {
+  W <- c(0,cumsum(sqrt(dt)*rnorm(251)))
+  lnSt <- log(So) + (mu_anual-0.5*sigma_anual^2)*t + sigma_anual*W
+  ln_p_final[i] <- lnSt[252]
+}
+
+p_final <- exp(ln_p_final)
+
+li <- mean(p_final) - 1.96*sd(p_final)
+ls <- mean(p_final) + 1.96*sd(p_final)
+
+c(li, ls)
+```
+
+Resumen de los resultados:
+
+|           |                                  |
+|:---------:|:--------------------------------:|
+| ***mes*** | ***Intervalo de Confianza 95%*** |
+|     3     |         [132.54, 243.01]         |
+|     6     |         [115.40, 281.43]         |
+|     9     |         [101.58, 318.19]         |
+|    12     |         [88.97, 354.76]          |
+
+La primera observación que podemos hacer es que el valor inferior del intervalo va disminuyendo conforme pasa el tiempo. Esto nos indica que el precio del activo tiene una probabilidad de bajar entre más tiempo pasé.  Al mismo tiempo podemos observar como el valor superior del intervalo también incrementa con forme pasa el tiempo.  Esto nos indica entonces que mientras aumentamos el tiempo también incrementa la incertidumbre.  
+
+Con esto podemos concluir que el que se ensanchen los intervalos de confianza es normal y de esperarse en modelos aleatorios. El riesgo de predicción aumenta con el tiempo, ya que la volatilidad acumulada hace que los precios futuros sean más inciertos cada vez.  
+
+## Discusión Acerca de la Teoría
+
+*Finalmente, como conclusión de esta entrega, se analizarán los resultados obtenidos en las pruebas de hipótesis y las simulaciones de precios en comparación con lo que establece la teoría financiera.*
+
+La teoría financiera clásica, particularmente el Modelo de Valoración de Activos Financieros (CAPM) , asume que los rendimientos de los activos financieros siguen una distribución normal. Este supuesto facilita el uso de herramientas estadísticas para modelar el comportamiento del mercado y calcular probabilidades de eventos en el futuro. 
+
+En este análisis, se aplicaron pruebas de normalidad a los rendimientos de la acción de Quálitas.  La idea detrás de estas pruebas es evaluar si los datos empíricos se alinean con el modelo teórico. En este caso, utilizamos la prueba  de Jarque-Bera.   
+
+Si los rendimientos siguen una distribución normal, esto tiene importantes implicaciones en la medición de riesgo y en la predicción de precios futuros. Sin embargo, la evidencia empírica en mercados financieros sugiere que los rendimientos presentan colas gruesas y asimetría, lo que indica desviaciones de la normalidad. 
+
+También, se realizaron simulaciones estocásticas utilizando parámetros diarios y anuales para estimar la evolución del precio de la acción en distintos horizontes temporales. Se utilizó un proceso basado en la ecuación de Movimiento Geométrico Browniano.  
+
+Aunque este modelo es ampliamente utilizado en finanzas, tiene ciertas limitaciones cuando se contrasta con datos reales. Por ejemplo, puede llegar a subestimas eventos extremos, en el mercado mundial hay situación que no se pueden predecir y que llegan inesperadamente. Las crisis financieras pueden generar cambios drásticos en el precio lo cual no se explica en una distribución normal.  Otro de los limitantes es que la teoría clásica asume que la volatilidad es constante en el tiempo, pero en la práctica, la volatilidad es dinámica y presenta clustering.  
+
+Si bien la normalidad es un supuesto clave en muchos modelos financieros, los datos reales frecuentemente presentan desviaciones significativas de este supuesto. Esto implica que, para una mejor estimación de riesgos y rendimientos, pueden ser necesarios modelos más sofisticados, como el modelo GARCH. 
+
+En conclusión, aunque los modelos teóricos proporcionan una base útil para el análisis financiero, es fundamental contrastarlos con datos reales y ajustar los supuestos cuando sea necesario. 

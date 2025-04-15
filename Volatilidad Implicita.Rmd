@@ -1,0 +1,68 @@
+---
+title: "Volatilidad Implicita"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+***¿Qué es la volatilidad implícita?***
+
+La volatilidad implícita es una estimación de la volatilidad futura de un activo financiero, obtenida a partir de los precios de sus opciones. A diferencia de la volatilidad histórica (calculada con datos pasados), la implícita refleja la percepción del mercado sobre cuánto se moverá el precio del activo en el futuro.
+
+***¿Cómo se mide?***
+
+La volatilidad implícita no se observa directamente, sino que se calcula invirtiendo un modelo de valoración de opciones, como el modelo de Black-Scholes. Se toma el precio actual de una opción en el mercado y se busca la volatilidad que, al aplicarse en la fórmula del modelo, genera ese mismo precio.
+
+Ecuación de Black-Scholes (para una opción call europea):
+
+$$
+C = S_0 N(d_1) - K e^{-rT} N(d_2)
+$$
+
+$$
+d_1 = \frac{\ln(S_0 / K) + \left(r + \frac{1}{2} \sigma^2\right) T}{\sigma \sqrt{T}}, \quad
+d_2 = d_1 - \sigma \sqrt{T}
+$$
+
+Vamos a calcular la volatilidad implícita de una opción que tiene las siguientes características:
+
+```{r}
+S0 <- 58.39
+k <- 63
+r <- 0.09
+t <- 6/12
+d <- 0
+c <- 2.71
+```
+
+Antes de nada es necesario determinar si se cumple el supuesto básico que hay detrás del modelo de B&S, el cuál establece que para una opción de tipo call, el precio mínimo debe ser siguiente:
+
+$$
+\text{Precio opción} \geq max(0, S-Ke^{-rt})
+$$
+
+```{r}
+ifelse(c>=max(0, S0-k*exp(-r*t)), 'Se cumple', 'No se cumple')
+```
+
+```{r}
+library(derivmkts)
+```
+
+```{r}
+vol_imp <- bscallimpvol(s=S0, k=k, r=r, tt=t, d=d, price=c)
+vol_imp
+```
+
+```{r}
+library(quantmod)
+clave <- 'WMT.MX'
+datos <- new.env()
+getSymbols(clave, from = '2024-01-01', env=datos)
+precio <- datos[[clave]][,6]
+
+rend <- na.omit(diff(log(precio)))
+vol_hist <- sd(rend)*sqrt(252)
+
+vol_hist
+```

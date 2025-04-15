@@ -1,0 +1,128 @@
+---
+title: "EWMA"
+author: "Rose R"
+date: "2025-03-13"
+output: html_document
+---
+
+Estimación del Modelo EWMA
+
+Cuando estimamos este modelo, el objetivo es determinar el valor de lambda
+
+$$\sigma_t^2=(1-\lambda)R^2_{t-1}+\lambda \sigma^2_{t-1}$$
+
+Sabemos que para encontrar lambda usamos una maximización de maxima verosimilitud, a través de la optimización de la función
+
+$$\max{\sum_{i=1}^n}[-\ln\sigma_i^2-(\frac{R_i}{\sigma_i})^2]$$
+
+```{r}
+library(quantmod)
+library(lubridate)
+datos <- new.env()
+clave <- "Q.MX"
+getSymbols(clave, from="2000-01-01", env=datos)
+precio <- datos[[clave]][,6]
+rendimiento <- na.omit(diff(log(precio)))
+rend_c <- rendimiento^2
+```
+
+Prueba con un solo valor de $\lambda$
+
+```{r}
+l <- 0.1
+
+var_est <- matrix(0, nrow=nrow(rend_c), ncol=1)
+
+var_est[1,1] <- rend_c[1,1]
+```
+
+```{r}
+for (i in 2:nrow(rend_c)){
+  var_est[i,1] <- (1-l)*rend_c[i-1,1]+l*var_est[i-1,1]
+}
+```
+
+Función de máxima verosimilitud
+
+```{r}
+fun_ver <- sum(-log(var_est)-(rend_c/var_est))
+fun_ver
+```
+
+Ahora probamos con distintos valores de $\lambda$
+
+```{r}
+#Rose
+
+L <- seq(0.11,0.99,0.01)
+
+fun_ver <- matrix(0, nrow = nrow(rend_c), ncol=1)
+Res <- matrix(0, nrow = length(L), ncol=2)
+c <- 1
+
+var_est <- matrix(0, nrow=nrow(rend_c), ncol=1)
+var_est[1,1] <- rend_c[1,1]
+
+for (l in L){
+  
+  for (i in 2:nrow(rend_c)){
+    var_est[i,1] <- (1-l)*rend_c[i-1,1]+l*var_est[i-1,1]
+    fun_ver[i,1] <- (-log(var_est[i,1])-(rend_c[i,1]/var_est[i,1]))
+  }
+  
+  Res[c,1] <- l
+  Res[c,2] <- sum(fun_ver)
+  c <- c + 1
+  
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+#Mío
+L <- seq(0.1,0.9,0.1)
+
+fun_ver <- matrix(0, nrow = length(L), ncol=2)
+
+c <- 1
+
+for (l in L){
+  
+  var_est <- matrix(0, nrow=nrow(rend_c), ncol=1)
+  var_est[1,1] <- rend_c[1,1]
+  
+  for (i in 2:nrow(rend_c)){
+    var_est[i,1] <- (1-l)*rend_c[i-1,1]+l*var_est[i-1,1]
+  }
+  
+  fun_ver[c,1] <- l
+  fun_ver[c,2] <- sum(-log(var_est)-(rend_c/var_est))
+  
+  c <- c + 1
+  
+}
+```
+
+Vamos a seleccionar el valor de lambda óptimo
+
+```{r}
+colnames(Res) <- c('Lambda', 'FnVer')
+Loptimo <- Res[order(Res[,'FnVer'], decreasing = TRUE)][1]
+Loptimo
+```
+
+Vamos a efectuar una estimación futura para la varianza del modelo usando el lambda óptimo
+
+```{r}
+library(fTrading)
+```
+
+```{r}
+var_est_op <- xts(emaTA(rend_c, Loptimo), order.by = date(rend_c))
+```
+
+```{r}
+vol_futura <- sqrt((1-Loptimo)*as.numeric(last(rend_c))
+                   +Loptimo*as.numeric(last(var_est_op)))
+
+vol_futura
+```

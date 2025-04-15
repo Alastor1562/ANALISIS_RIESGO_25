@@ -1,0 +1,146 @@
+---
+title: "Promedio Móvil"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Estimación de un modelo de promedio móvil para estimar la varianza.
+
+Aquí voy a poner las características del promedio móvil.
+
+$$
+\sigma_{t,m}^2=\sum_{i=1}^m R_{t-i}^2
+$$
+
+```{r}
+library(quantmod)
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-03-12', env=datos)
+precio <- datos[[clave]][,6]
+
+rend <- na.omit(diff(log(precio)))
+rend_c <- rend^2
+```
+
+```{r}
+plot(rend)
+plot(rend_c)
+```
+
+La estimación primaria (más sencilla) de la varianza es el rendimiento al cuadrado de ese momento, y si a eso le sacas la raiz, se convierte en volatilidad
+
+```{r}
+library(TTR)
+var_5 <- SMA(rend_c, n=6)
+var_10 <- SMA(rend_c, n=11)
+var_20 <- SMA(rend_c, n=21)
+var_40 <- SMA(rend_c, n=41)
+```
+
+Antes de decidir quien es M, vamos a graficar las estimaciones y varianza de cada modelo (en realidad tenemos 4 modelos, todos promedios móviles, pero diferentes valores de m)
+
+```{r}
+layout(matrix(c(1,2)))
+plot(var_40)
+plot(rend_c)
+```
+
+Para seleccionar el mejor valor de m, que produzca el menor error, usaremos 3 indicadores:
+
+-   RMSE
+
+Aquí voy a poner la formula del RMSE, y explicar que mide
+
+```{r}
+library(tibble)
+RMSE <- tibble(
+  'm=5' = sqrt(mean((na.omit(rend_c-var_5))^2)),
+  'm=10' = sqrt(mean((na.omit(rend_c-var_10))^2)),
+  'm=20' = sqrt(mean((na.omit(rend_c-var_20))^2)),
+  'm=40' = sqrt(mean((na.omit(rend_c-var_40))^2))
+)
+RMSE
+```
+
+De acuerdo a este indicador, el mejor modelo es aquel de m=5
+
+Los otros 2 indicadores son:
+
+-   EAMP - Error Absoluto Medio Proporcional
+
+$$
+EAMP=\frac{1}{H}|R_1^2-\sigma_i^2|
+$$
+
+-   ECPP - Error Cuadrático Promedio Proporcional
+
+$$
+ECPP=\sqrt{\frac{1}{H}(\frac{R_1^2-\sigma_i^2}{R_i^2})^2}
+$$
+
+```{r}
+EAMP <- tibble(
+  'm=5' = mean(abs(na.omit(rend_c-var_5))),
+  'm=10' = mean(abs(na.omit(rend_c-var_10))),
+  'm=20' = mean(abs(na.omit(rend_c-var_20))),
+  'm=40' = mean(abs(na.omit(rend_c-var_40)))
+)
+EAMP
+```
+
+También me recomienda el modelo m=5
+
+Tercer indicador es el ECPP,el cual consiste en proporcional el error
+
+**Nota:** Como el indicador dice que es neceario dividir entre el rendimiento al cuadrado, vamos a calcular el valor del indicador y después eliminar los valores que resulten infinitos ocasionados por el rendimiento cero.
+
+```{r}
+w <- merge.xts(((na.omit(var_5-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_10-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_20-rend_c))/(na.omit(rend_c)))^2,
+               ((na.omit(var_40-rend_c))/(na.omit(rend_c)))^2
+               )
+
+w <- subset(w, w$SMA != 'Inf')
+```
+
+```{r}
+ECPP <- sqrt(colMeans(na.omit(w)))
+ECPP
+```
+
+Este indicador refuerza que el mejor valor para la estimación es m=5
+
+Con esta primera conclusión del valor de m, vamos a construir una estimación futura para la varianza en un día después del último día de información disponible
+
+```{r}
+m <- 5
+```
+
+Hoy es:
+
+```{r}
+library(lubridate)
+
+fecha_est <- date(tail(precio,1)) + 1
+fecha_est
+```
+
+Y mi estimación es para hoy
+
+Usando los últimos 5 días, la estimación de la varianza es:
+
+```{r}
+mean(tail(rend_c, m))
+```
+
+Por lo tanto la estimación de volatilidad es de:
+
+```{r}
+V_est <- sqrt(mean(tail(rend_c, m)))
+V_est
+```
+
+Por lo tanto, el valor óptimo de r es `r m` , y la estimación de volatilidad usando este valor es de `r V_est*100` % para el día `r fecha_est`.
