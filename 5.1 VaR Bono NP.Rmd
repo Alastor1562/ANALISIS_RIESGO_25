@@ -1,0 +1,113 @@
+---
+title: "VaR Bono NP"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Calcular el VaR de un bono M a 5 años, paga cupones semestrales a una tasa fija. Para este caso, la tasa cupón es de 10% anual. Considerar que el valor nominal es de 100 pesos.
+
+```{r}
+precio_bono <- function(vn, tc, ti, t, m) {
+  # tc tasa cupon anual
+  # m numero de veces al año que se paga el cupón
+  # t vencimiento en años
+  # ti tasa de interes 
+  n <- t * m               
+  c <- vn * tc / m         
+  r <- ti / m               
+  flujos <- rep(c, n)
+  flujos[n] <- flujos[n] + vn  
+  precio <- sum(flujos / (1 + r)^(1:n))
+  duracion_per <- sum((1:n) * (flujos / (1 + r)^(1:n))) / precio
+  return(list(
+    precio = precio,
+    duracion = duracion_per/m
+  ))
+}
+```
+
+La metodología no paramétrica, considera los siguientes pasos:
+
+1.  Calcular el valor inicial del bono (valor del portafolio, precio del bono)
+
+2.  Usar tasas históricas que ha tenido este bono, y con ellas simularé tasas futuras que usaré para calcular posibles escenarios del precio futuro del bono. Estas tasas futuras se estimarán por un método de simulación históricas:
+
+$$
+t_{t+1}=t_t(1+r_h)
+$$
+
+3.  Calcular el precio del bono usando cada una de las tasas futuras como tasa de descuento
+4.  Construir la función de pérdidas y ganancias; y con ella, estimar el VaR
+
+# Paso 1: Valor inicial del bono
+
+```{r warning=FALSE, include=FALSE}
+library(readxl)
+library(lubridate)
+library(quantmod)
+```
+
+```{r}
+Tasa5 <- read_xlsx('Bono_M_5.xlsx')
+Tasa5$Tasa <- as.numeric(Tasa5$Tasa)/100
+Tasa5 <- xts(Tasa5$Tasa, order.by=date(Tasa5$Fecha))
+
+Ti5 <- as.numeric(last(Tasa5))
+```
+
+Precio del bono:
+
+```{r}
+pb5 <- precio_bono(100, 0.1, Ti5, 5, 2)[['precio']]
+pb5
+```
+
+# Paso 2: Simular tasas futuras
+
+```{r}
+rent5 <- diff(log(Tasa5))
+plot(rent5)
+```
+
+```{r}
+te5 <- na.omit(Ti5*(1+rent5))
+```
+
+# Paso 3: Calcular precio del bono con tasas etimadas
+
+```{r}
+pbe5 <- matrix(0, nrow(te5), 1)
+
+for (i in 1:nrow(te5)) {
+  pbe5[i,1] <- precio_bono(100, 0.1, as.numeric(te5[i,1]), 5, 2)[['precio']]
+}
+```
+
+# Paso 4: Función de pérdidas y ganancias
+
+```{r}
+fpg5 <- pbe5 - pb5
+hist(fpg5, n=20)
+```
+
+```{r}
+var99_5 <- quantile(fpg5, 0.01)
+var99_5
+```
+
+Que sucedería si tengo una posición de 100,000 pesos en este tipo de bono? Cuál sería el VaR? Sería equivalente a decir cuántos bonos tengo equivalentes a ese monto y multiplicar por el VaR
+
+```{r}
+100000/100*var99_5
+```
+
+# VaR Paramétrico
+
+```{r}
+dur5 <- precio_bono(100, 0.1, Ti5, 5, 2)[['duracion']]
+
+durm5 <- dur5 / (1+Ti5)
+
+qnorm(0.01)*sd(na.omit(rent5))*pb5 * durm5 * Ti5
+```

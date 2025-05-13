@@ -1,0 +1,388 @@
+---
+title: "Entrega 5"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+# Portada
+
+**DEPARTAMENTO DE MATEMÁTICAS Y FÍSICA \| MATEMÁTICAS PARA FINANZAS Y ECONOMÍA \| ANÁLISIS DE RIESGO**
+
+***PROFA. MARIA DEL ROSARIO RUIZ HERNANDEZ***
+
+![](Captura%20de%20pantalla%202025-02-05%20193104.png){width="283"}
+
+**Proyecto Final** - Qualitas Controladora S.A.B. de C.V.
+
+**Fecha:** Mayo 07, 2025
+
+**Integrantes de equipo:**
+
+-   Samuel Gómez Jiménez - 744337
+
+-   Raúl Oviedo Magaña- 744442
+
+-   Andrea Santoyo Vega - 744585
+
+-   Ana Paula Moreno Haro - 744069
+
+# Part 5: Value Risk
+
+## Introducción
+
+En esta útlima parte del proyecto, vamos a calcular el Valor en Riesgo (VaR) para un portafolio compuesto por 100 acciones en partes iguales de dos emisoras mexicanas: Quálitas y Soriana. El VaR es una herramienta fundamental en la gestión de riesgos financieros, ya que nos permite estimar la pérdida potencial máxima que este portafolio podría experimentar en un horizonte de tiempo determinado.
+
+El objetivo principal de esta entrega es aplicar distintos métodos para estimar el VaR y evaluar qué tan bien se ajustan a la realidad del comportamiento de los activos financieros. Para ello, se implementaron dos enfoques metodológicos: el VaR paramétrico, que asume una distribución normal de los rendimientos, y el VaR no paramétrico, basado en simulación histórica. Además, se aplicó un análisis de backtesting para comparar los resultados teóricos con las pérdidas efectivamente observadas, evaluando la precisión de cada modelo.
+
+Adicionalmente, se construyó un portafolio diversificado y se determinaron los pesos óptimos de inversión entre las dos emisoras, con el objetivo de minimizar el riesgo total del portafolio. Con base en esta optimización, se recalculó el VaR y se analizó el impacto de una adecuada asignación de activos sobre la exposición al riesgo.
+
+Este análisis permitió observar cómo las distintas metodologías ofrecen resultados contrastantes y cómo una estrategia de inversión basada en datos puede contribuir significativamente a una mejor gestión del riesgo financiero.
+
+```{r include=FALSE}
+library(quantmod)
+library(tibble)
+library(tidyverse)
+library(knitr)
+```
+
+## VaR No Paramétrico
+
+En esta primer sección, vamos a calcular el VaR no paramétrico del portafolio empleando el enfoque histórico del VaR, el cual se basa exclusivamente en los rendimientos pasados sin hacer suposiciones sobre su distribución, lo que lo hace una técnica simple pero poderosa al incorporar directamente la variabilidad real del mercado.
+
+Primero descargamos los datos históricos de Quálitas y Soriana desde 2015-07-17 , elegimos esta fecha de inicio ya que es la más antigua donde coinciden los datos de Quálitas y Soriana.
+
+**Paso 1: Cálculo de Rendimientos Logarítmicos**
+
+La primera etapa consiste en calcular los rendimientos logarítmicos diarios de cada activo:
+
+$$ r_{i,t} = \log(P_{i,t}) - \log(P_{i,t-1}) $$ donde:
+
+-   ( $r_{i,t}$ ) es el rendimiento de la acción ( i ) en el día ( t )
+
+-   ( $P_{i,t}$ ) es el precio de cierre de la acción ( i ) en el día ( t )
+
+Este enfoque permite tratar mejor la escala multiplicativa de los precios financieros y es más apropiado para análisis de series temporales de precios.
+
+**Paso 2: Simulación histórica de rendimientos**
+
+A partir de los rendimientos históricos, se proyectan posibles precios futuros suponiendo que los rendimientos se repiten:
+
+$$ P_{i,t+1}^{(sim)} = P_{i,t}^{(último)} \cdot (1 + r_{i,t}) $$
+
+**Paso 3: Valor futuro del portafolio**
+
+Multiplicamos los precios simulados por la cantidad de acciones:
+
+$$ V_t^{(sim)} = 100 \cdot P_{Q,t}^{(sim)} + 100 \cdot P_{S,t}^{(sim)} $$
+
+donde ( $V_t^{(sim)}$ ) representa los valores simulados del portafolio.
+
+**Paso 4: Función de pérdidas y ganancias**
+
+Calculamos la diferencia entre el valor inicial del portafolio y cada uno de los valores simulados:
+
+$$ \Delta V_t = V_t^{(sim)} - V_0 $$
+
+Estos valores representan la ganancia o pérdida potencial diaria en cada escenario histórico simulado.
+
+**Paso 5: Calculo de VaR**
+
+El VaR al nivel de confianza ( $\alpha$ ) se obtiene como el percentil (1 - $\alpha$ ) de las pérdidas:
+
+$$ VaR_{1\text{ día},\alpha} = - \text{percentil}_{1-\alpha}(\Delta V_t) $$
+
+De esta manera estamos calculando el VaR a un día
+
+**Paso 6: Escalado del VaR a “n” días**
+
+Una vez calculado el Valor en Riesgo (VaR) para un horizonte de 1 día, es posible estimar el VaR para múltiples días:
+
+$$ VaR_{n\text{ días},\alpha} = VaR_{1\text{ día},\alpha} \cdot \sqrt{n} $$
+
+donde:
+
+-   $VaR_{n\text{ días},\alpha}$: VaR al nivel de confianza $\alpha$ para $n$ días.
+
+-   $VaR_{1\text{ día},\alpha}$: VaR de un día.
+
+-   $n$: número de días.
+
+**Resultados**
+
+Estos resultados indican que con un 95% de confianza:
+
+```{r include=FALSE}
+clave <- c('Q.MX','SORIANAB.MX')
+datos <- new.env()
+getSymbols(clave, from = '2015-07-17',to = '2025-05-04',env=datos)
+precio_q <- datos[[clave[1]]][,6]
+precio_soriana <- datos[[clave[2]]][,6]
+
+V0 <- as.numeric(100*last(precio_q) + 100*last(precio_soriana))
+```
+
+```{r include=FALSE}
+rend_q <- na.omit(diff(log(precio_q)))
+rend_soriana <- na.omit(diff(log(precio_soriana)))
+
+precio_fq <- as.numeric(last(precio_q))*(1+rend_q)
+precio_fsoriana <- as.numeric(last(precio_soriana))*(1+rend_soriana)
+```
+
+```{r include=FALSE}
+v_futuro <- 100*precio_fq + 100*precio_fsoriana
+```
+
+```{r include=FALSE}
+f_per_gan <- v_futuro - V0
+VaR_NP95 <- quantile(f_per_gan, 0.05)
+VaR_NP95
+```
+
+```{r echo=FALSE}
+VaR_NP <- tibble(
+  n_días = c(1,5,10,20),
+  VaR_NP_95 = c(
+    VaR_NP95,
+    VaR_NP95*sqrt(5),
+    VaR_NP95*sqrt(10),
+    VaR_NP95*sqrt(20)
+  )
+)
+
+kable(VaR_NP, caption = "Tabla 1. VaR No Paramétrico al 95% para diferentes horizontes", digits = 2)
+```
+
+Esto nos da una manera de medir responsable del riesgo dándonos una idea clara de cuánto dinero podríamos perder en condiciones normales del mercado. Por eso, el VaR no paramétrico con simulación histórica es útil en condiciones normales. Aplicarlo al portafolio de Qualitas y Soriana muestra que es un método práctico, fácil de entender y que se puede adaptar a diferentes periodos de tiempo.
+
+```{r echo=FALSE}
+VaR_NP90 <- quantile(f_per_gan, 0.1)
+VaR_NP99 <- quantile(f_per_gan, 0.01)
+
+hist(f_per_gan, n=100, col='darkorchid', main='Función de Pérdidas y Ganancias a 1 día')
+abline(v=VaR_NP90, col='darkgreen',lwd=2)
+abline(v=VaR_NP95, col='blue',lwd=2)
+abline(v=VaR_NP99, col='red',lwd=2)
+```
+
+El histograma ilustra la distribución de pérdidas y ganancias simuladas para un portafolio en un horizonte de un día. Las líneas verticales marcan los valores de VaR para diferentes niveles de confianza: 90%, 95% y 99%. Estas líneas representan los percentiles correspondientes en la cola izquierda de la distribución, es decir, las pérdidas más extremas que podrían ocurrir con baja probabilidad. Se ha de notar que:
+
+-   La línea verde correspondiente al VaR al 90% se encuentra más cerca del centro de la distribución.
+
+-   La línea azul del VaR al 95% está más a la izquierda (mayor pérdida).
+
+-   & la línea roja del VaR al 99% es la más alejada, indicando la pérdida máxima esperada bajo escenarios muy adversos.
+
+Esto nos da a entender que a medida que se incrementa el nivel de confianza, el valor en riesgo también crece. Esto se debe a que al elevar el nivel de confianza se busca cubrir un porcentaje mayor de los escenarios posibles, incluyendo aquellos eventos más extremos que se encuentran en la cola de la distribución. Esta visualización permite comprender de manera intuitiva cómo el riesgo percibido por el modelo crece a medida que se busca una mayor certeza sobre la magnitud de las pérdidas posibles, lo cual es fundamental en la gestión de riesgos financieros.
+
+## VaR Paramétrico
+
+El VaR paramétrico es un método que calcula el VaR asumiendo que los rendimientos siguen una distribución normal. Por ello, se basa en los parámetros estadísticos de la media ($mu$) y la desviación estándar ($sigma$).
+
+Es un enfoque eficiente y sencillo, pero depende fuertemente del supuesto de normalidad, lo que puede limitar su precisión en mercados con alta volatilidad o eventos extremos.
+
+Dado que:
+
+$$ R_{t+1} \sim \mathcal{N}(\mu, \sigma^2) $$
+
+Y que la pérdida es:
+
+$$ W = -V_t \cdot R_{t+1} $$
+
+Entonces, el VaR se define como el valor tal que:
+
+$$ P(W < VaR) = \alpha \Rightarrow P\left(R_{t+1} > -\frac{VaR}{V_t}\right) = \alpha $$
+
+Estandarizando la distribución normal:
+
+$$ \frac{-VaR - V_t \mu}{V_t \sigma} = z_\alpha \Rightarrow VaR = -z_\alpha V_t \sigma - V_t \mu $$
+
+Si asumimos $\mu \approx 0$, la fórmula se simplifica a:
+
+$$ \boxed{VaR = z_\alpha \cdot V_t \cdot \sigma} $$
+
+Para horizontes mayores a un día:
+
+$$ \boxed{VaR_{t} = z_\alpha \cdot V_t \cdot \sigma \cdot \sqrt{t}} $$
+
+Se estimó el VaR paramétrico al 95% de confianza, usando datos históricos de los rendimientos diarios de Qualitas y Soriana de hace 6 meses, para distintos horizontes de tiempo:
+
+```{r include=FALSE}
+clave <- c('Q.MX','SORIANAB.MX')
+datos <- new.env()
+getSymbols(clave, from = '2024-11-04',to = '2025-05-04',env=datos)
+precio_q <- datos[[clave[1]]][,6]
+precio_soriana <- datos[[clave[2]]][,6]
+```
+
+```{r include=FALSE}
+rend_q <- na.omit(diff(log(precio_q)))
+rend_soriana <- na.omit(diff(log(precio_soriana)))
+```
+
+```{r include=FALSE}
+R <- merge.xts(rend_q, rend_soriana)
+covarianza <- cov(R)
+covarianza
+```
+
+```{r include=FALSE}
+wq <- 100*as.numeric(last(precio_q)) / V0
+ws <- 100*as.numeric(last(precio_soriana)) / V0
+w <- as.numeric(c(wq, ws))
+```
+
+```{r include=FALSE}
+z95 <- qnorm(0.05)
+```
+
+```{r include=FALSE}
+vol_p <- as.numeric(sqrt(w%*%covarianza%*%w))
+```
+
+```{r echo=FALSE}
+VaR_P95 <- V0*z95*vol_p
+
+VaR_P <- tibble(
+  n_días = c(1,5,10,20),
+  VaR_P_95 = c(
+    VaR_P95,
+    VaR_P95*sqrt(5),
+    VaR_P95*sqrt(10),
+    VaR_P95*sqrt(20)
+  )
+)
+
+kable(VaR_P, caption = "Tabla 2. VaR Paramétrico al 95% para diferentes horizontes", digits = 2)
+```
+
+Estos valores representan la pérdida máxima esperada para una posición en Qualitas, durante el número de días especificado, con 95% de confianza.
+
+Los resultados obtenidos muestran que el VaR paramétrico para Qualitas incrementa conforme aumenta el número de días considerados, lo cual era de esperarse, ya que al alargar el horizonte temporal también se amplía la posible exposición al riesgo. Esta relación creciente es coherente con el hecho de que el riesgo se acumula, aunque no de manera lineal, sino proporcional a la raíz del tiempo, debido a la forma en que se comporta la desviación estándar en estadística.
+
+Además, este enfoque resulta muy útil para obtener una estimación rápida del riesgo bajo condiciones normales de mercado. Sin embargo, es importante tener presente que el modelo se basa en varios supuestos como la normalidad de los rendimientos que no siempre se cumplen en la práctica, sobre todo en mercados con alta volatilidad o eventos extremos.
+
+## Backtesting
+
+Backtesting es una técnica que consiste en evaluar el desempeño histórico de una estrategia de inversión utilizando datos pasados. Es decir, simulas cómo habría funcionado tu estrategia si la hubieras implementado en el pasado. Esto permite estimar la robustez de la estrategia y detectar posibles debilidades antes de aplicarla en tiempo real.
+
+En el contexto de riesgos financieros, se usa principalmente para validar modelos de cálculo de pérdidas esperadas, como el VaR. El objetivo es ver qué tan frecuentemente las pérdidas reales exceden el nivel de pérdida pronosticado por el modelo.
+
+En este análisis se comparó el VaR a 1 día con las pérdidas efectivamente ocurridas. Se obtuvo la frecuencia de excepciones, es decir, cuántas veces se superó el VaR estimado.
+
+```{r include=FALSE}
+v_hist <- 100*precio_q + 100*precio_soriana
+```
+
+```{r include=FALSE}
+g_p <- na.omit(diff(v_hist))
+```
+
+```{r include=FALSE}
+BTP <- ifelse(g_p < VaR_P95,1,0)
+Backtesting_P <- sum(BTP) / length(BTP) * 100
+```
+
+```{r include=FALSE}
+BTNP <- ifelse(g_p < VaR_NP95,1,0)
+Backtesting_NP <- sum(BTNP)  / length(BTNP) * 100
+```
+
+```{r echo=FALSE}
+backtesting <- tibble(
+  'Backtesting_P' = Backtesting_P,
+  'Backtesting_NP' = Backtesting_NP
+  )
+
+kable(backtesting, caption = "Tabla 3. Backtesting de ambas metodologías", digits = 2)
+```
+
+-   **Backtesting del VaR Paramétrico (BTP)**: Evaluando cuantas veces las pérdidas reales superan el VaR, basándonos en la varianza del portafolio y una distribución normal (enfoque paramétrico). Se obtuvo un resultado de 2.5%. Esto significa que en un 2.5% de los días, las pérdidas fueron mayores que el VaR de 95%. Ya que lo esperado sería de 5%, entonces este modelo parece ser conservador, subestima ligeramente el riesgo real.
+
+-   **Backtesting del VaR No Paramétrico (BTNP)**: Aquí se prueba cuántas veces las pérdidas superan el VaR obtenido por simulación histórica (no paramétrico). Se obtuvo un resultado de 5%. Esto quiere decir que el 5% de los días, las pérdidas reales superaron el VaR no paramétrico al 95%.
+
+El backtesting del VaR no paramétrico muestra que el modelo es preciso y confiable. La frecuencia con la que las pérdidas reales superan el VaR coincide con lo esperado (5%). Esto sugiere que el uso de simulación histórica en este portafolio refleja bien la realidad del riesgo y es adecuado para gestionar pérdidas extremas.
+
+## Portafolio óptimo
+
+En esta parte del proyecto, se calculó la composición óptima del portafolio para minimizar el VaR paramétrico, es decir, para reducir al máximo el riesgo de pérdida esperada bajo condiciones normales del mercado.
+
+En lugar de asumir una distribución histórica o hacer simulación, aquí se parte del supuesto de riesgos normalmente distribuidos y se usa una fórmula matemática basada en la varianza del portafolio.
+
+Formula:
+
+$$ w_1 = \frac{2\sigma_2^2 - 2\sigma_{12}}{2\sigma_1^2 + 2\sigma_2^2 - 4\sigma_{12}} \quad\text{y}\quad w_2 = 1 - w_1 $$
+
+Donde:
+
+-   σ1 : desviación estándar (volatilidad) de Quálitas
+
+-   σ2 : desviación estándar de Soriana
+
+-   σ12: correlación entre ambas acciones
+
+-   w1 : proporción del portafolio en Quálitas
+
+-   w2 : proporción del portafolio en Soriana
+
+Aplicando esta fórmula con los datos del portafolio, se obtuvieron los siguientes pesos óptimos:
+
+```{r echo=FALSE}
+sq <- as.numeric(covarianza[1, 1])
+
+ss <- as.numeric(covarianza[2, 2])
+
+cov <- as.numeric(covarianza[1, 2])
+
+wq_opt <- (2*ss - 2*cov) / (2*sq + 2*ss - 4*cov)
+
+ws_opt <- 1 - wq_opt
+
+w_opt <- as.numeric(c(wq_opt, ws_opt))
+
+pesos <- tibble(
+  'Quálitas' = wq_opt,
+  'Soriana' = ws_opt
+  )
+
+kable(pesos, caption = "Tabla 4. Pesos óptimos de cada activo en el portafolio", digits = 2)
+```
+
+-   Quálitas: 22.38%
+
+-   Soriana: 77.62%
+
+Con esta nueva asignación, se recalculó el VaR paramétrico del portafolio. El resultado mostró una reducción significativa en el nivel de riesgo:
+
+```{r echo=FALSE}
+vol_p <- as.numeric(sqrt(w_opt%*%covarianza%*%w_opt))
+
+VaR_P95_opt <- V0*z95*vol_p
+
+VaR_P_opt <- tibble(
+  n_días = c(1,5,10,20),
+  VaR_P_95_opt = c(
+    VaR_P95_opt,
+    VaR_P95_opt*sqrt(5),
+    VaR_P95_opt*sqrt(10),
+    VaR_P95_opt*sqrt(20)
+  )
+)
+
+kable(VaR_P_opt, caption = "Tabla 5. VaR Paramétrico óptimo al 95% para diferentes horizontes", digits = 2)
+```
+
+Esta mejora evidencia que una correcta diversificación, ajustando las proporciones de inversión de forma estratégica, puede reducir considerablemente el riesgo de pérdida esperada en el portafolio, casi a la mitad.
+
+## Conclusión
+
+Después de realizar este análisis, podemos decir que trabajar con el VaR nos permitió entender mejor qué tan vulnerable puede ser un portafolio ante movimientos inesperados del mercado. Lo interesante fue ver cómo, dependiendo del método (paramétrico o no paramétrico) y del horizonte de tiempo, los resultados varían considerablemente. Por ejemplo, al usar el enfoque no paramétrico, observamos que para un periodo de 1 día el VaR era de aproximadamente -632 pesos, mientras que en el paramétrico para el mismo plazo fue de -875, lo cual ya nos da una señal de cómo distintos supuestos influyen en la percepción del riesgo. A medida que aumentamos los días, las pérdidas estimadas también crecieron, como era de esperarse.
+
+También nos pareció muy importante realizar el backtesting, ya que nos ayudó a comprobar si nuestros modelos realmente estaban haciendo buenas predicciones. En este caso, el modelo paramétrico fue más conservador y subestimó el riesgo en menor medida, mientras que el histórico se ajustó justo al límite del 5% de excepciones, lo que lo hace bastante aceptable para contextos donde no se asume normalidad en los datos.
+
+Finalmente, en el ejercicio de ajustar los pesos del portafolio aplicamos una estrategia óptima de diversificación (22% en Quálitas y 78% en Soriana) y con esto, logramos reducir el VaR paramétrico de forma significativa. Por ejemplo, para un horizonte de 1 día, pasó de -875 a -490, casi un 45% menos de riesgo. Con esto nos dimos cuenta que no se trata solo de cuánto invertimos, sino de cómo lo distribuimos.

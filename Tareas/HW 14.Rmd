@@ -1,0 +1,169 @@
+---
+title: "HW-14"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+# VaR NO Paramétrico
+
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+library(lubridate)
+library(quantmod)
+```
+
+```{r}
+precio_bono <- function(vn, tc, ti, t, m) {
+  # tc tasa cupon anual
+  # m numero de veces al año que se paga el cupón
+  # t vencimiento en años
+  # ti tasa de interes 
+  n <- t * m               
+  c <- vn * tc / m         
+  r <- ti / m               
+  flujos <- rep(c, n)
+  flujos[n] <- flujos[n] + vn  
+  precio <- sum(flujos / (1 + r)^(1:n))
+  duracion_per <- sum((1:n) * (flujos / (1 + r)^(1:n))) / precio
+  return(list(
+    precio = precio,
+    duracion = duracion_per/m
+  ))
+}
+```
+
+Descargamos las tasas históricas de Bonos M a 5 años y las transformamos a serie de tiempo mensual:
+
+```{r}
+Tasa5 <- read_xlsx('Bono_M_5.xlsx')
+Tasa5$Tasa <- as.numeric(Tasa5$Tasa)/100
+Tasa5 <- to.monthly(xts(Tasa5$Tasa, order.by=date(Tasa5$Fecha)))
+```
+
+Descargamos las tasas históricas de Bonos M a 10 años y las transformamos a serie de tiempo mensual:
+
+```{r}
+Tasa10 <- read_xlsx('Bono_M_10.xlsx')
+Tasa10$Tasa <- as.numeric(Tasa10$Tasa)/100
+Tasa10 <- to.monthly(xts(Tasa10$Tasa, order.by=date(Tasa10$Fecha)))
+```
+
+Empatamos las fechas de ambas series y obtenemos la última tasa de cada uno:
+
+```{r}
+TI <- na.omit(merge.xts(Tasa10, Tasa5))[, c(4, 8)]
+
+Ti10 <- as.numeric(last(TI))[1]
+Ti5 <- as.numeric(last(TI))[2]
+```
+
+Calculamos el valor inicial de cada posición y las sumamos:
+
+```{r}
+pb5 <- precio_bono(1000000, 0.1, Ti5, 5, 2)[['precio']]
+
+pb10 <- precio_bono(500000, 0.15, Ti10, 10, 2)[['precio']]
+
+pp <- pb5 + pb10
+```
+
+Realizamos simulación histórica de los rendimientos de ambas tasas:
+
+```{r}
+rent5 <- diff(log(TI[,2]))
+te5 <- na.omit(Ti5*(1+rent5))
+```
+
+```{r}
+rent10 <- diff(log(TI[,1]))
+te10 <- na.omit(Ti10*(1+rent10))
+```
+
+Calculamos el precio del portafolio con las tasas estimadas:
+
+```{r}
+pbe5 <- matrix(0, nrow(te5), 1)
+
+for (i in 1:nrow(te5)) {
+  pbe5[i,1] <- precio_bono(1000000, 0.1, as.numeric(te5[i,1]), 5, 2)[['precio']]
+}
+
+pbe10 <- matrix(0, nrow(te10), 1)
+
+for (i in 1:nrow(te10)) {
+  pbe10[i,1] <- precio_bono(500000, 0.15, as.numeric(te10[i,1]), 10, 2)[['precio']]
+}
+
+pbep <- pbe5 + pbe10
+```
+
+Función de pérdidas y ganancias:
+
+```{r}
+fpgp <- pbep - pp
+```
+
+Cálculo de VaR a 99% de confianza:
+
+```{r}
+var99_p <- quantile(fpgp, 0.01)
+var99_p
+```
+
+# VaR Paramétrico
+
+VaR de Bonos M a 5 años:
+
+```{r}
+dur5 <- precio_bono(1000000, 0.1, Ti5, 5, 2)[['duracion']]
+
+durm5 <- dur5 / (1+Ti5)
+
+var99_p5 <- qnorm(0.01)*sd(na.omit(rent5))*pb5 * durm5 * Ti5
+var99_p5
+```
+
+VaR de Bonos M a 10 años:
+
+```{r}
+dur10 <- precio_bono(500000, 0.15, Ti10, 10, 2)[['duracion']]
+
+durm10 <- dur10 / (1+Ti10)
+
+var99_p10 <- qnorm(0.01)*sd(na.omit(rent10))*pb10 * durm10 * Ti10
+var99_p10
+```
+
+Correlación de los rendimientos:
+
+```{r}
+cor <- as.numeric(cor(na.omit(rent5), na.omit(rent10)))
+cor
+```
+
+VaR del portafolio:
+
+```{r}
+VaR <- c(var99_p5, var99_p10)
+
+p <- matrix(c(1, cor,
+              cor, 1), nrow = 2, byrow = TRUE)
+
+VaR_total <- -sqrt(t(VaR) %*% p %*% VaR)
+VaR_total
+```
+
+# Conclusión
+
+El **VaR paramétrico** subestima el riesgo real de la posición en bonos debido a que asume que los rendimientos de los bonos siguen una distribución normal, lo cual rara vez se cumple en la práctica. En particular, las tasas de interés y los precios de los bonos pueden exhibir asimetrías y colas pesadas que no son capturadas por la campana gaussiana. **El VaR no paramétrico**, al estar basado en la distribución empírica de los cambios en tasas observados, refleja mejor la presencia de eventos extremos. Prueba de ello lo podemos apreciar en el histograma de la función de pérdidas y ganancias:
+
+```{r}
+hist(fpgp, n=50)
+```
+
+Aunque la distribución parece aproximadamente simétrica, presenta colas más pesadas (valores extremos a ambos lados) que las de una distribución normal. Visualmente, hay una ligera asimetría negativa, es decir, más valores extremos negativos que positivos, lo que incrementa el riesgo no capturado por el VaR paramétrico, es decir, una mayor probabilidad de pérdidas grandes de la que asumiría el modelo normal.

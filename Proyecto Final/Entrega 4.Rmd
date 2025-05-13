@@ -2,10 +2,62 @@
 title: "Entrega 4"
 author: "Sam"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
 ---
 
-```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Portada
+
+**DEPARTAMENTO DE MATEMÁTICAS Y FÍSICA \| MATEMÁTICAS PARA FINANZAS Y ECONOMÍA \| ANÁLISIS DE RIESGO**
+
+***PROFA. MARIA DEL ROSARIO RUIZ HERNANDEZ***
+
+![](Captura%20de%20pantalla%202025-02-05%20193104.png){width="283"}
+
+**Proyecto Final** - Qualitas Controladora S.A.B. de C.V.
+
+**Fecha:** Abril 25, 2025
+
+**Integrantes de equipo:**
+
+-   Samuel Gómez Jiménez - 744337
+
+-   Raúl Oviedo Magaña- 744442
+
+-   Andrea Santoyo Vega - 744585
+
+-   Ana Paula Moreno Haro - 744069
+
+# Part 4: Variance Models
+
+## Introducción
+
+En este proyecto se realizó un análisis detallado de los modelos de varianza aplicables a la acción de *Qualitas Controladora S.A.B. de C.V.* con el objetivo de estimar su volatilidad diaria y entender el comportamiento de su varianza a lo largo del tiempo. Para ello, se implementaron y compararon distintos enfoques econométricos, incluyendo promedio móvil, modelos EWMA y ARCH/GARCH.
+
+El análisis se llevó a cabo utilizando información histórica de precios de la acción. Primero, se estimaron modelos de promedio móvil con distintos valores de m (5, 10, 20 y 40), seleccionando el valor óptimo con base en criterios estadísticos y de desempeño. Posteriormente, se aplicó un modelo EWMA para capturar la volatilidad condicional. También se identificaron y ajustaron modelos ARCH y GARCH adecuados para modelar la varianza condicional de los rendimientos, así como modelos ARIMA o ARMA para describir el comportamiento de la media (rendimiento) del activo.
+
+Cada modelo fue justificado con base en su ajuste y capacidad predictiva, y se realizó una comparación de las volatilidades estimadas con los valores reales utilizando una tabla de estimaciones creada en clase. Finalmente, se elaboraron conclusiones generales sobre la idoneidad de cada modelo para representar la volatilidad de la acción de Quálitas, destacando sus ventajas y limitaciones en el contexto del análisis financiero.
+
+## Promedio Móvil
+
+Para esta primera sección, vamos realizar la estimación de volatilidad del acción por medio de un modelo de promedio móvil, el cuál consta de la siguiente estructura:
+
+$$
+\sigma_{t,m}=\sum_{i=1}^m R_{t-1}^2
+$$
+
+El parámetro “m” controla la sensibilidad del modelo: valores pequeños responden rápido a cambios recientes, mientras que valores grandes suavizan más la serie y capturan tendencias más estables. Elegir “m” correctamente es clave para un buen desempeño predictivo. En este caso decidimos probar diferentes valores de medias móviles de 5,10, 20, 40 periodos.
+
+Se estima la varianza en cada periodo con distintos valores de “m”. Luego, se comparan las varianzas estimadas con la varianza real observada (o alguna aproximación) utilizando las métricas RMSE, EAMP y ECPP.
+
+Primero, el RMSE (Error cuadrático medio) se calcula de la siguiente manera para cada una de las m:
+
+$$ RMSE = \sqrt{ \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2 } $$
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
 library(quantmod)
 library(TTR)
 library(tibble)
@@ -18,28 +70,30 @@ library(fGarch)
 library(rugarch)
 library(dplyr)
 library(purrr)
+library(DT)
+library(htmlwidgets)
+library(ggplot2)
+library(tidyr)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 clave <- 'Q.MX'
 datos <- new.env()
-getSymbols(clave, env=datos)
+getSymbols(clave, to = '2025-03-11', env=datos)
 precio <- datos[[clave]][,6]
 
 rendimiento <- na.omit(diff(log(precio)))
 rend_c <- rendimiento^2
 ```
 
-# Promedio Móvil
-
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 var_5 <- SMA(rend_c, n=6)
 var_10 <- SMA(rend_c, n=11)
 var_20 <- SMA(rend_c, n=21)
 var_40 <- SMA(rend_c, n=41)
 ```
 
-```{r}
+```{r echo=FALSE, warning=FALSE}
 RMSE <- tibble(
   'm=5' = sqrt(mean((na.omit(rend_c-var_5))^2)),
   'm=10' = sqrt(mean((na.omit(rend_c-var_10))^2)),
@@ -49,7 +103,11 @@ RMSE <- tibble(
 RMSE
 ```
 
-```{r}
+A continuación, se presenta la fórmula de EAMP(Error absoluto medio proporcional):
+
+$$ EAMP = \frac{1}{n} \sum_{i=1}^{n} \left| \frac{y_i - \hat{y}_i}{y_i} \right| $$
+
+```{r echo=FALSE, warning=FALSE}
 EAMP <- tibble(
   'm=5' = mean(abs(na.omit(rend_c-var_5))),
   'm=10' = mean(abs(na.omit(rend_c-var_10))),
@@ -59,7 +117,11 @@ EAMP <- tibble(
 EAMP
 ```
 
-```{r}
+Finalmente, se obtiene el ECPP(Error cuadratico promedio proporcional) de la siguiente manera:
+
+$$ ECPP = \frac{1}{n} \sum_{i=1}^{n} \left( \frac{y_i - \hat{y}_i}{y_i} \right)^2 $$
+
+```{r echo=FALSE, warning=FALSE}
 w <- merge.xts(((na.omit(var_5-rend_c))/(na.omit(rend_c)))^2,
                ((na.omit(var_10-rend_c))/(na.omit(rend_c)))^2,
                ((na.omit(var_20-rend_c))/(na.omit(rend_c)))^2,
@@ -71,17 +133,33 @@ w <- subset(w, w$Q.MX.Adjusted != 'Inf' |
               w$Q.MX.Adjusted.2 != 'Inf'|
               w$Q.MX.Adjusted.3 != 'Inf')
 
+colnames(w) <- c("m=5", "m=10", "m=20", "m=40")
+
 ECPP <- sqrt(colMeans(na.omit(w)))
 ECPP
 ```
 
-```{r}
+El valor óptimo de “m” será aquel que minimice consistentemente los errores en las tres métricas evaluadas, priorizando EAMP o ECPP si se desea penalizar más los errores relativos.
+
+Tras evaluar el modelo de promedio móvil para estimar la varianza con distintos valores del parámetro m (5, 10, 20 y 40), se concluye que el valor m=5 ofrece el mejor desempeño en términos de precisión. Este valor minimiza las tres métricas de error utilizadas:
+
+-   RMSE: 0.0008259
+
+-   EAMP: 0.0003531
+
+-   ECPP: 3143.240
+
+Esto sugiere que una ventana de 5 periodos capta de manera más eficiente la dinámica reciente de la volatilidad, permitiendo una estimación más ajustada y sensible a los cambios en los retornos. Por lo tanto, se recomienda utilizar m=5 como configuración óptima para este modelo de varianza con media móvil.
+
+Con este valor de m se realizan estimaciones de volatilidad del 11 de marzo de este año hasta el 22 de abril.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
 m <- 5
 ```
 
-```{r}
-fecha_inicio <- "2025-03-12"
-fecha_fin <- "2025-04-06"
+```{r message=FALSE, warning=FALSE, include=FALSE}
+fecha_inicio <- "2025-03-11"
+fecha_fin <- "2025-04-22"
 
 predicciones_pm <- tibble(Fecha = as.Date(character()), Prediccion_PM = numeric())
 
@@ -113,23 +191,54 @@ for (i in fechas) {
         predicciones_pm <- bind_rows(predicciones_pm, nueva_fila)
         }
     }
-
-predicciones_pm
 ```
 
-# EWMA
+```{r echo=FALSE}
+n <- nrow(predicciones_pm)
 
-```{r}
+predicciones_pm$Fecha[n - 1] <- as.Date("2025-04-21")
+
+tabla_interactiva <- datatable(predicciones_pm, 
+                               options = list(pageLength = 10, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+saveWidget(tabla_interactiva, "pm.html", selfcontained = TRUE)
+
+tabla_interactiva
+```
+
+## EWMA
+
+Es un modelo utilizado para estimar la varianza condicional de una serie de rendimientos financieros. Este método asigna mayor peso a los rendimientos más recientes y menor a los rendimientos antiguos, permitiendo una mayor sensibilidad a los cambios recientes en la volatilidad del activo.
+
+La fórmula recursiva para calcular la varianza es:
+
+$$ \sigma_t^2 = (1 - \lambda) R_{t-1}^2 + \lambda \sigma_{t-1}^2 $$
+
+Interpretación del parámetro ( $\lambda$ ):
+
+-   Valores altos de ( $\lambda$ ) (ej. 0.97) generan una estimación más estable y lenta en responder a nuevas observaciones.
+-   Valores bajos de ( $\lambda$ ) (ej. 0.85) generan una estimación más sensible a cambios recientes.
+
+La fórmula equivalente para estimar la volatilidad diaria (desviación estándar) es: $$ \sigma_t = \sqrt{(1 - \lambda) R_{t-1}^2 + \lambda \sigma_{t-1}^2} $$
+
+Para encontrar lambda usamos un proceso iterativo que busque un valor propuesto de $\lambda$ que maximice verosimilitud, a través de la optimización de la siguiente función:
+
+$$\max{\sum_{i=1}^n}[-\ln\sigma_i^2-(\frac{R_i}{\sigma_i})^2]$$
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
 clave <- 'Q.MX'
 datos <- new.env()
-getSymbols(clave, to = '2025-03-14', env=datos)
+getSymbols(clave, to = '2025-03-13', env=datos)
 precio <- datos[[clave]][,6]
 
 rend <- na.omit(diff(log(precio)))
 rend_c <- rend^2
 ```
 
-```{r}
+```{r include=FALSE}
 L <- seq(0.11,0.99,0.01)
 
 fun_ver <- matrix(0, nrow = nrow(rend_c), ncol=1)
@@ -157,9 +266,19 @@ Loptimo <- Res[order(Res[,'FnVer'], decreasing = TRUE)][1]
 Loptimo
 ```
 
-```{r}
+La aplicación del modelo EWMA para estimar la volatilidad de Quálitas Controladora S.A.B. de C.V. ha arrojado un valor óptimo de $\lambda$ = 0.93, lo cual se encuentra muy cerca del valor sugerido por JP Morgan (0.94) para datos diarios en el marco del modelo RiskMetrics.
+
+Este valor de $\lambda$ indica que el modelo asigna una alta ponderación a la información reciente, sin dejar de considerar parte del comportamiento pasado. En términos prácticos:
+
+La volatilidad estimada responde adecuadamente a cambios recientes en el mercado, pero evita reacciones excesivas ante movimientos puntuales no sostenidos.
+
+El valor de $\lambda$ = 0.93 representa un buen equilibrio entre reactividad y estabilidad, lo que sugiere que el comportamiento de los rendimientos de Quálitas presenta cierta persistencia, pero también requiere una sensibilidad moderada para capturar condiciones de mercado cambiantes.
+
+Con dicho valor de $\lambda$, se realizan estimaciones de volatilidad a partir del 13 de marzo.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
 fecha_inicio <- "2025-03-13"
-fecha_fin <- "2025-04-06"
+fecha_fin <- "2025-04-22"
 
 predicciones_ewma <- tibble(Fecha = as.Date(character()), Prediccion_EWMA = numeric())
 
@@ -192,13 +311,60 @@ for (i in fechas) {
         predicciones_ewma <- bind_rows(predicciones_ewma, nueva_fila)
         }
     }
-
-predicciones_ewma
 ```
 
-# ARCH-GARCH
+```{r echo=FALSE}
+n <- nrow(predicciones_ewma)
 
-```{r}
+predicciones_ewma$Fecha[n - 1] <- as.Date("2025-04-21")
+
+tabla_interactiva <- datatable(predicciones_ewma, 
+                               options = list(pageLength = 10, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+saveWidget(tabla_interactiva, "ewma.html", selfcontained = TRUE)
+
+tabla_interactiva
+```
+
+## ARCH-GARCH
+
+El modelo ARCH fue desarrollado para capturar el comportamiento dinámico de la volatilidad condicional en series de tiempo financieras, como los rendimientos de activos. A diferencia de los modelos clásicos con varianza constante, ARCH asume que la varianza de los errores cambia con el tiempo y depende de los valores pasados de los rendimientos.
+
+El modelo ARCH(p) se define como:
+
+$$ \sigma_t^2 = \omega + \sum_{i=1}^{p} \alpha_i R_{t-i}^2 $$ Donde:
+
+-   $\alpha_p$: Ponderaciones del rendimiento
+
+-   $\omega$: Varianza a largo plazo
+
+-   $R_{t-p}^2$: Rendimientos pasados
+
+Este modelo indica que la volatilidad actual σ_t\^2 depende del cuadrado del rendimiento anterior. Es decir, periodos de alta volatilidad tienden a ser seguidos por periodos de alta volatilidad, y viceversa por la propiedad de “agrupamiento de volatilidad”. El modelo ARCH permite generar pronósticos de volatilidad en función del comportamiento reciente del mercado. Su simplicidad nos ayuda a entender fácilmente los primeros pasos del modelado de varianza, aunque en la práctica el modelo GARCH se utiliza más para capturar de manera más compleja la dinámica de la varianza.
+
+El modelo GARCH (Generalized Autoregressive Conditional Heteroskedasticity) se usa para modelar y predecir la volatilidad variable en el tiempo de series de tiempo. Éste consta con la siguiente estructura:
+
+$$ \sigma_t^2 = \omega + \sum_{i=1}^{p} \alpha_i R_{t-i}^2 + \sum_{i=1}^{q} \beta_i \sigma_{t-i}^2 $$ Donde:
+
+-   $\beta_q$: Ponderaciones de las varianzas pasadas
+
+-   $\sigma_{t-q}^2$: Varianzas pasadas
+
+El modelo GARCH captura estos cambios dinámicos mejor que una varianza fija. A diferencia del modelo ARCH que solo toma en cuenta los rezagos de la varianza, en el modelo GARCH se toma en cuenta los rezagos de la varianza y además los rezagos del rendimiento.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, to = '2025-03-24', env=datos)
+precio <- datos[[clave]][,6]
+
+rend <- na.omit(diff(log(precio)))
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
 ArchTest <- function (x, lags=20, demean = FALSE) 
 {
   # Capture name of x for documentation in the output  
@@ -224,68 +390,224 @@ ArchTest <- function (x, lags=20, demean = FALSE)
 }
 ```
 
-```{r}
-ArchTest(rendimiento)
+Para verificar si esta familia de modelos es adecuada para la serie de datos, se aplicó una prueba LM (Lagrange Multiplier). La hipótesis nula de esta prueba indica que no existen efectos ARCH-GARCH, es decir, que la varianza de los errores es constante a lo largo del tiempo (hay homocedasticidad). Los resultados arrojaron un un p-value inferior a 2.2e-16 (muy pequeño). Dado que el p-value es significativamente menor que cualquier nivel común de significancia (como 0.05 o 0.01), se rechaza la hipótesis nula. Esto indica que sí existen efectos ARCH-GARCH significativos en los datos, lo cual justifica el uso de modelos ARCH o GARCH para capturar la dinámica temporal de la volatilidad en la serie analizada. Los resultados de la prueba se presentan a continuación:
+
+```{r echo=FALSE}
+ArchTest(rend)
 ```
 
-```{r}
-ARIMA <- auto.arima(rendimiento)
+Abajo se muestra un resumen de haber realizado ARIMA sobre los rendimientos. El resultado dá un modelo ARIMA(0,0,0), lo cuál implica que la serie de tiempo de rendimientos no presenta ni tendencia determinista ni autocorrelación significativa, es decir, los rendimientos pueden considerarse como ruido blanco.
+
+Si usamos un modelo ARIMA(0,0,0) con o sin media constante y luego aplicamos un GARCH(1,1) a sus residuos, obtendremos la misma estimación de varianza. Esto se debe a que GARCH modela la volatilidad a partir de los residuos al cuadrado, y restar una media constante no cambia su comportamiento ni la forma en que varían. Por eso, la dinámica de la varianza condicional es igual en ambos casos.
+
+```{r echo=FALSE}
+ARIMA <- auto.arima(rend)
 summary(ARIMA)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 residuos <- residuals(ARIMA)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 ARCH1 <- garchFit(formula =~garch(1,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(ARCH1)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 ARCH2 <- garchFit(formula =~garch(2,0), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(ARCH2)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 GARCH11 <- garchFit(formula =~garch(1,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(GARCH11)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 GARCH12 <- garchFit(formula =~garch(1,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(GARCH12)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 GARCH21 <- garchFit(formula =~garch(2,1), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(GARCH21)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 GARCH22 <- garchFit(formula =~garch(2,2), data = na.omit(residuos), cond.dist = "norm", trace = FALSE)
 summary(GARCH22)
 ```
 
-```{r}
-Est_arch <- predict(GARCH11, n.ahead=nrow(predicciones_pm)-7)
+Para escoger el mejor modelo decidimos probar los siguientes modelos:
 
-ultimas_fechas <- tail(predicciones_pm$Fecha, nrow(predicciones_pm)-7)
+-   ARCH(1)
+
+-   ARCH(2)
+
+-   GARCH(1,1)
+
+-   GARCH (1,2)
+
+-   GARCH(2,1)
+
+-   GARCH(2,2)
+
+Para evaluar y obtener el mejor modelo cuidamos que cumplan los siguientes requisitos:
+
+1.  Parsimonia: Es decir tiene que ser un modelo sencillo en donde explique el comportamiento que estamos observando. Esto significa que en ocasiones tendremos modelos muy complejos que no aportan nada a la estimación por lo que se deben descartar. Para que un modelo sea parsimonioso debemos considerar que los parámetros de la estimación deben ser significativos.
+
+2.  El modelo óptimo va a optimizar 3 cosas:
+
+    -   Función de verosimilitud, es decir preferimos modelos con un alto valor de esta función a modelos con valores pequeños.
+
+    -   El indicador AIC, nos refleja una medida de la relación que hay entre el número de parámetros del modelo y la verosimilitud, preferimos valores más pequeños.
+
+$$ AIC=2k-2ln(L)$$
+
+```         
+-  El indicador BIC que penaliza con la cantidad de números de datos, preferimos valores más pequeños.
+```
+
+$$
+BIC= kln(L) - 2ln(L)
+$$
+
+A continuación mostramos un resumen de los resultados obtenidos con cada modelo:
+
++------------+---------------+--------------+------------------+----------+----------+
+| Modelo     | Verosimilitud | Coeficientes | Parsimonía       | AIC      | BIC      |
+|            |               |              |                  |          |          |
+|            |               |              | (Significativos) |          |          |
++:==========:+:=============:+:============:+:================:+:========:+:========:+
+| ARCH(1)    | 6335          | 2            | 2                | -5.20296 | -5.19581 |
++------------+---------------+--------------+------------------+----------+----------+
+| ARCH(2)    | 6377.48       | 3            | 3                | -5.23704 | -5.22752 |
++------------+---------------+--------------+------------------+----------+----------+
+| GARCH(1,1) | 6424.672      | 3            | 3                | -5.27582 | -5.26629 |
++------------+---------------+--------------+------------------+----------+----------+
+| GARCH(1,2) | 6428.798      | 4            | 4                | -5.27839 | -5.26648 |
++------------+---------------+--------------+------------------+----------+----------+
+| GARCH(2,1) | 6424.29       | 4            | 3                | -5.27468 | -5.26278 |
++------------+---------------+--------------+------------------+----------+----------+
+| GARCH(2,2) | 6428.798      | 4            | 3                | -5.27757 | -5.26328 |
++------------+---------------+--------------+------------------+----------+----------+
+
+Podemos concluir que **el mejor modelo es GARCH (1,1) p**orque con solo 3 parámetros tiene los mejores valores de AIC (-5.275829) y BIC (-5.26629), lo que significa que ajusta bien los datos sin ser demasiado complicado, a diferencia de los otros modelos que no mejoran lo suficiente para justificar su complejidad.
+
+Ya definido el modelo a emplear, realizamos las estimaciones de volatilidad desde el 24 de marzo.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+Est_arch <- predict(GARCH11, n.ahead=nrow(predicciones_pm)-8)
+
+ultimas_fechas <- tail(predicciones_pm$Fecha, nrow(predicciones_pm)-8)
 
 predicciones_arch <- tibble(
   Fecha = ultimas_fechas,
-  Prediccion_ARCH11 = Est_arch$standardDeviation
+  Prediccion_GARCH11 = Est_arch$standardDeviation
 )
-
-predicciones_arch
 ```
 
-# Resultados
+```{r echo=FALSE}
+n <- nrow(predicciones_arch)
 
-```{r}
-combinado <- full_join(predicciones_pm, predicciones_ewma, by = "Fecha")
+predicciones_arch$Fecha[n - 1] <- as.Date("2025-04-21")
+
+tabla_interactiva <- datatable(predicciones_arch, 
+                               options = list(pageLength = 10, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+saveWidget(tabla_interactiva, "arch.html", selfcontained = TRUE)
+
+tabla_interactiva
+```
+
+## Estimaciones de Volatilidad
+
+A continuación presentamos en una sola tabla todas las estimaciones de volatilidad con los distintos modelos junto a la volatilidad real diaria. Esta última se calculó sacando el valor absoluto del rendimiento diario del activo.
+
+```{r include=FALSE}
+clave <- 'Q.MX'
+datos <- new.env()
+getSymbols(clave, from = '2025-03-10',to = '2025-04-23', env=datos)
+precio <- datos[[clave]][,6]
+
+vol_real <- data.frame(
+  Fecha = predicciones_pm$Fecha,
+  vol_real = as.numeric(abs(na.omit(diff(log(precio)))))
+)
+
+n <- nrow(vol_real)
+
+vol_real$Fecha[n - 1] <- as.Date("2025-04-21")
+```
+
+```{r echo=FALSE}
+
+combinado <- full_join(vol_real, predicciones_pm, by = "Fecha")
+
+combinado <- full_join(combinado, predicciones_ewma, by = "Fecha")
 
 combinado <- full_join(combinado, predicciones_arch, by = "Fecha")
 
-print(combinado)
+tabla_interactiva <- datatable(combinado, 
+                               options = list(pageLength = 10, 
+                                              autoWidth = TRUE, 
+                                              scrollX = TRUE), 
+                               rownames = FALSE)
+
+saveWidget(tabla_interactiva, "resultados.html", selfcontained = TRUE)
+
+tabla_interactiva
 ```
+
+## Análisis de Resultados
+
+Para determinar cuál de los modelos empleados estima con mayor precisión la volatilidad diaria del activo, se utilizó el criterio de minimización del error cuadrático medio (RMSE). Este indicador permite cuantificar la diferencia promedio entre los valores estimados y la volatilidad observada, penalizando más fuertemente los errores grandes. Así, el modelo que presente el menor RMSE será considerado el más adecuado para capturar la dinámica de la volatilidad en este caso de estudio. La fórmula a emplear es la misma empleada anteriormente:
+
+$$ RMSE = \sqrt{ \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2 } $$
+
+A continuación se muestra el error de cada modelo:
+
+```{r echo=FALSE}
+RMSE_resultados <- tibble(
+  'Promedio Móvil' = sqrt(mean((na.omit(
+    combinado$vol_real-combinado$Prediccion_PM))^2)),
+  'EWMA' = sqrt(mean((na.omit(
+    combinado$vol_real-combinado$Prediccion_EWMA))^2)),
+  'GARCH11' = sqrt(mean((na.omit(
+    combinado$vol_real-combinado$Prediccion_GARCH11))^2)),
+)
+RMSE_resultados
+```
+
+Con base en los valores de RMSE obtenidos, se observa que el modelo **GARCH(1,1)** presenta el menor error cuadrático medio con un valor aproximado de 0.013096. Esto sugiere que el modelo GARCH(1,1) es el que mejor captura la dinámica de la volatilidad diaria del activo analizado, proporcionando estimaciones más cercanas a los valores reales. Aunque las diferencias numéricas entre los modelos no son drásticas, la ventaja del GARCH radica en su capacidad para modelar explícitamente la heterocedasticidad condicional presente en los retornos financieros, lo que lo convierte en la opción más precisa dentro del conjunto evaluado.
+
+## Conclusiones
+
+A continuación se finalizará dando una conclusión general de cada modelo empleado. Para ello, veo útil visualizar cada modelo de predicción contra el valor real de volatilidad:
+
+```{r echo=FALSE}
+combinado_long <- combinado |> 
+  select(Fecha, vol_real, Prediccion_PM, Prediccion_EWMA, Prediccion_GARCH11) |> 
+  pivot_longer(cols = -c(Fecha, vol_real), 
+               names_to = "Modelo", 
+               values_to = "Volatilidad_Predicha")
+
+ggplot(combinado_long, aes(x = Fecha)) +
+  geom_line(aes(y = vol_real, color = "Volatilidad Real"), linewidth = 1) +
+  geom_line(aes(y = Volatilidad_Predicha, color = Modelo), linetype = "dashed") +
+  labs(title = "Comparación de Volatilidad Real vs Predicha",
+       x = "Fecha",
+       y = "Volatilidad",
+       color = "Serie") +
+  theme_minimal()
+```
+
+-   **Promedio Móvil (PM)**: El modelo de Promedio Móvil sigue razonablemente bien el comportamiento general de la volatilidad real, especialmente en los tramos más estables. Sin embargo, muestra cierta rigidez para adaptarse a cambios bruscos, ya que su suavizado tiende a subestimar los picos y desfasarse respecto a la serie real. Aun así, su desempeño fue competitivo, con un RMSE bajo y un comportamiento predecible.
+
+-   **EWMA**: Aunque el modelo EWMA está diseñado para reaccionar más rápido a los cambios recientes, en este caso sobreestimó de forma notoria algunos picos, como se observa a inicios de abril ya que tiende a replicar demasiado rápido el comportamiento visto anteriormente. Esto genera una mayor volatilidad en la predicción misma, lo cual podría explicar su mayor RMSE. A pesar de esto, logra capturar ciertos movimientos ascendentes, lo que podría ser útil en contextos donde se priorice sensibilidad ante cambios.
+
+-   **GARCH(1,1)**: El modelo GARCH logra un buen equilibrio entre suavizado y capacidad de reacción, ajustándose adecuadamente a los niveles de volatilidad sin generar estimaciones excesivas. A pesar de que el modelo presentó el menor RMSE, visualmente su estimación luce casi lineal o con poca variabilidad a lo largo del tiempo. Esto se debe a que se usaron los residuos de un ARIMA(0,0,0) que modelaba los retornos del activo (equivalente a no modelar la media). Al no capturar posibles patrones en la media, el GARCH sufre de cierta capacidad para detectar correctamente los cambios en la volatilidad. Además, es posible que los parámetros estimados del modelo generen una varianza condicional muy estable, provocando que la predicción luzca como una línea casi plana.

@@ -1,0 +1,118 @@
+---
+title: "Risk-Adjusted Performance Measures"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Indicador de Sharpe
+
+Mide el rendimiento en exceso comparado con la tasa libre de riresgo, en relación con la volatilidad
+
+$$
+RS=\frac{R_p-R_f}{\sigma(R_p)}
+$$
+
+**Un mayor valor de RS implica un mejor rendimiento histórico del portafolio**
+
+**Si es negativo implica que** $R_p < R_f$​
+
+Si el índice o ratio de **Sharpe es negativo**, indica un rendimiento inferior a la rentabilidad sin riesgo.
+
+Sí el Ratio de Sharpe es de 0.533, indica que por cada unidad de riesgo, obtienes 0.533 unidades de retorno en exceso sobre la tasa libre de riesgo.
+
+# Indicador de Treynor
+
+$$
+RT=\frac{R_p-R_f}{B_p}
+$$
+
+$B_p$​ es una medida del riesgo del activo en función de la variación de sus retornos y la variación de los retornos del mercado.\
+ ▪ Si $B_p=1$ la acción se mueve en la misma proporción que el índice\
+ ▪ Si $B_p>1$ la acción registra mayor variabilidad que el índice\
+ ▪ Si $B_p<1$ la acción registra menor variabilidad que el índice
+
+Se basa en el retorno por unidad de riesgo sistemático.
+
+Por cada $B_p$ unidades de riesgo sistemático asumido, el inversionista se vio recompensado con un rendimiento del RT mensual.
+
+Entre mayor sea, más rentabilidad por unidad de riesgo.
+
+# PC5: Medidas de desempeño ajustadas por Riesgo
+
+Construye un portafolio que contenga 100 acciones del activo que tiene tu proyecto y 100 acciones de otro activo de libre elección (sea de la BMX).
+
+Usa la información histórica (mensual) de los últimos 5 años, y determina lo que se solicita:
+
+-   Ratio de Sharpe
+
+-   Indicador de Treynor
+
+## Ratio de Sharpe
+
+```{r include=FALSE}
+library(quantmod)
+library(readxl)
+```
+
+```{r}
+clave <- c('Q.MX','BIMBOA.MX')
+datos <- new.env()
+getSymbols(clave, from = '2020-05-01',to = '2025-05-01', env=datos)
+precio_q <- datos[[clave[1]]][,6] * 100
+precio_b <- datos[[clave[2]]][,6] * 100
+precio_p <- precio_q + precio_b
+
+precio_p <- to.monthly(precio_p)[,4]
+
+r_p <- monthlyReturn(precio_p)
+```
+
+```{r}
+getSymbols('^MXX', from = '2020-05-01',to = '2025-05-01', env=datos)
+precio_m <- datos[['MXX']][,6]
+
+precio_m <- to.monthly(precio_m)[,4]
+
+r_m <- monthlyReturn(precio_m)
+```
+
+```{r}
+r_f <- read_xlsx('Cete_6.xlsx')
+r_f$SF43936 <- as.numeric(r_f$SF43936/100/12)
+r_f <- as.xts(r_f$SF43936,order.by = r_f$Fecha)
+
+r_f <- to.monthly(r_f)[,4]
+
+r_f <- r_f[-c(1:4), ]
+```
+
+```{r}
+Sharpe <- (mean(r_p) - mean(r_f)) /sd(r_p)
+Sharpe
+```
+
+Por cada unidad de riesgo, obtenemos 0.1897 unidades de retorno en exceso sobre la tasa libre de riesgo, lo cuál es bastante bajo, MUY BAJO - Raul
+
+## Ratio de Treynor
+
+```{r}
+E_jf <- r_p - r_f
+E_mf <- r_m - r_f
+```
+
+```{r}
+CAPM <- lm(E_jf ~ E_mf)
+resultados <- summary(CAPM)
+```
+
+```{r}
+beta = resultados$coefficients[2]
+```
+
+```{r}
+Treynor = (mean(r_p) - mean(r_f)) / beta
+Treynor
+```
+
+El índice es menor a 1, por lo que el portafolio registra menor variabilidad que el índice. Por cada `beta` unidades de riesgo sistemático asumido, el inversionista se vio recompensado con un rendimiento del 0.0171 mensual.

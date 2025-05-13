@@ -1,0 +1,155 @@
+---
+title: "VaR Opciones NP"
+author: "Sam"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# PC4: VaR No Paramétrico de Opciones
+
+## Inciso A
+
+Hay una opción CALL y una opción PUT, sobre un activo cuyo precio actual es de \$50 pesos y tiene una volatilidad anula de 15%. Si ambas opciones tienen fecha de vencimiento a un año y la opción tipo CALL tiene precio de ejercicio de 48 y la opción tipo PUT tiene precio de ejercicio de 56, determina el precio de cada una de las opciones. Considera que la tasa de interés libre de riesgo es de 9%. Usa la función ***blackscholes*** de la librería ***ragtop***.
+
+```{r message=FALSE, warning=FALSE}
+library(ragtop)
+library(tibble)
+```
+
+Indicamos los parámetros a emplear:
+
+```{r}
+S0 <- 50
+sigma <- 0.15
+r <- 0.09
+T <- 1
+Kc <- 48
+Kp <- 56
+```
+
+Calculamos el precio del Call:
+
+```{r}
+call_price <- blackscholes(
+  1 ,S = S0, K = Kc, r = r, t = T, vol = sigma)[["Price"]]
+call_price
+```
+
+Calculamos el precio del Put:
+
+```{r}
+put_price <- blackscholes(
+  -1, S = S0, K = Kp, r = r, t = T, vol = sigma)[["Price"]]
+put_price
+```
+
+## Inciso B
+
+Una la información del punto a) y los precios de las primas que encontraste para determinar el valor en riesgo al 99% y 95% de las siguientes posiciones:
+
+-   Una posición larga de la opción CALL
+
+-   Una posición corta de la opción CALL
+
+-   Una posición larga de la opción PUT
+
+-   Una posición corta de la opción PUT
+
+Empezamos con la simulación de precios al vencimiento:
+
+```{r}
+set.seed(42)
+
+sim <- 100000
+Z <- qnorm(runif(sim))
+St <- S0 * exp((r - 0.5 * sigma^2) + Z * sigma)
+```
+
+Long Call:
+
+```{r}
+long_call_payoff <- pmax(St - Kc, 0) * exp(-r * T)
+fpg_long_call <- long_call_payoff - call_price
+
+VaR_long_call_95 <- quantile(fpg_long_call, 0.05)
+VaR_long_call_99 <- quantile(fpg_long_call, 0.01)
+```
+
+Short Call:
+
+```{r}
+short_call_payoff <- -pmax(St - Kc, 0) * exp(-r * T)
+fpg_short_call <- short_call_payoff - call_price
+
+VaR_short_call_95 <- quantile(fpg_short_call, 0.05)
+VaR_short_call_99 <- quantile(fpg_short_call, 0.01)
+```
+
+Long Put:
+
+```{r}
+long_put_payoff <- pmax(Kp - St, 0) * exp(-r * T)
+fpg_long_put <- long_put_payoff - put_price
+
+VaR_long_put_95 <- quantile(fpg_long_put, 0.05)
+VaR_long_put_99 <- quantile(fpg_long_put, 0.01)
+```
+
+Short Put:
+
+```{r}
+short_put_payoff <- -pmax(Kp - St, 0) * exp(-r * T)
+fpg_short_put <- short_put_payoff - put_price
+
+VaR_short_put_95 <- quantile(fpg_short_put, 0.05)
+VaR_short_put_99 <- quantile(fpg_short_put, 0.01)
+```
+
+Resultados:
+
+```{r}
+VaR <- tibble(
+  Posición = c("Long CALL", "Short CALL", "Long PUT", "Short PUT"),
+  VaR_95 = c(
+    VaR_long_call_95,
+    VaR_short_call_95,
+    VaR_long_put_95,
+    VaR_short_put_95
+  ),
+  VaR_99 = c(
+    VaR_long_call_99,
+    VaR_short_call_99,
+    VaR_long_put_99,
+    VaR_short_put_99
+  )
+)
+
+VaR
+```
+
+## Incisio C
+
+Considera un strangle largo, conformado por las opciones descritas en el punto a). Usa la metodología descrita para calcular el VaR de la posición.
+
+```{r}
+fpg_strangle = long_call_payoff + long_put_payoff - (call_price + put_price)
+```
+
+```{r}
+hist(fpg_strangle, n=50)
+```
+
+```{r}
+VaR_strangle_95 <- quantile(fpg_strangle, 0.05)
+VaR_strangle_99 <- quantile(fpg_strangle, 0.01)
+```
+
+```{r}
+var_strangle <- tibble(
+  Posición = "Strangle Largo",
+  `VaR 95%` = VaR_strangle_95,
+  `VaR 99%` = VaR_strangle_99
+)
+
+print(var_strangle)
+```
